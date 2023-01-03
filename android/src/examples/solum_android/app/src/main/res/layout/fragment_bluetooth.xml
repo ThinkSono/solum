@@ -14,7 +14,7 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintBottom_toTopOf="@id/button_second">
+        app:layout_constraintBottom_toBottomOf="parent">
 
         <LinearLayout
             android:id="@+id/bluetooth_permissions_layout"
@@ -61,26 +61,16 @@
                 android:id="@+id/scan_status"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:layout_marginRight="16dp"
                 android:text="Stopped"
                 />
-        </LinearLayout>
 
-        <LinearLayout
-            android:orientation="horizontal"
-            android:id="@+id/scan_layout"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content">
             <Button
-                android:id="@+id/startScanBtn"
+                android:id="@+id/toggleScanBtn"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginRight="16dp"
                 android:text="Start Scan"/>
-            <Button
-                android:id="@+id/stopScanBtn"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Stop Scan"/>
         </LinearLayout>
 
         <LinearLayout
@@ -117,17 +107,4 @@
                 android:layout_height="wrap_content"/>
         </LinearLayout>
     </LinearLayout>
-
-
-
-    <Button
-        android:id="@+id/button_second"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="@string/previous"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/main" />
-
 </androidx.constraintlayout.widget.ConstraintLayout>

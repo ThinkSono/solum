@@ -76,15 +76,17 @@ public class BluetoothFragment extends Fragment implements DeviceReceiver {
         binding.bluetoothPermissionsValue.setText(text);
     }
 
-    private void updateScanningLabel() {
-        String text = "";
+    private void updateScanningUI() {
+        String labelText = "";
+        String buttonText = "";
         switch (scanStatus) {
-            case SCANNING: text = "Scanning"; break;
-            case STOPPED: text = "Stopped"; break;
-            case ERROR: text = "Error"; break;
-            default: text = "Unknown"; break;
+            case SCANNING: labelText = "Scanning"; buttonText = "Stop Scan"; break;
+            case STOPPED: labelText = "Stopped"; buttonText = "Start Scan"; break;
+            case ERROR: labelText = "Error"; buttonText = "Start Scan"; break;
+            default: labelText = "Unknown"; buttonText = "Start Scan"; break;
         }
-        binding.scanStatus.setText(text);
+        binding.scanStatus.setText(labelText);
+        binding.toggleScanBtn.setText(buttonText);
     }
 
     @RequiresApi(api = Build.VERSION_CODES.S)
@@ -107,11 +109,13 @@ public class BluetoothFragment extends Fragment implements DeviceReceiver {
     public void onViewCreated(@NonNull View view, Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
 
-        binding.buttonSecond.setOnClickListener(v -> NavHostFragment.findNavController(BluetoothFragment.this)
-                .navigate(R.id.action_BluetoothFragment_to_FirstFragment));
-
-        binding.startScanBtn.setOnClickListener(v -> startScan());
-        binding.stopScanBtn.setOnClickListener(v -> stopScan());
+        binding.toggleScanBtn.setOnClickListener(v -> {
+            if (scanStatus == ScanStatus.SCANNING) {
+                stopScan();
+            } else {
+                startScan();
+            }
+        });
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             binding.requestPermissionsBtn.setOnClickListener(v -> requireBluetoothPermissions());
@@ -187,12 +191,11 @@ public class BluetoothFragment extends Fragment implements DeviceReceiver {
             currentScan = new ScanCallback(this);
             leScanner.startScan(currentScan);
             scanStatus = ScanStatus.SCANNING;
-            updateScanningLabel();
         } catch (SecurityException x) {
             Log.e("BluetoothFragment", "Missing required permissions for scan");
             scanStatus = ScanStatus.ERROR;
         }
-        updateScanningLabel();
+        updateScanningUI();
     }
 
     private void stopScan() {
@@ -206,7 +209,7 @@ public class BluetoothFragment extends Fragment implements DeviceReceiver {
             Log.e("BluetoothFragment", "Missing required permissions for scan");
             scanStatus = ScanStatus.ERROR;
         }
-        updateScanningLabel();
+        updateScanningUI();
     }
 
     @Override
