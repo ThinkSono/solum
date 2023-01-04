@@ -4,7 +4,12 @@ import android.Manifest;
 import android.annotation.SuppressLint;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
+import android.bluetooth.BluetoothGatt;
+import android.bluetooth.BluetoothGattCallback;
+import android.bluetooth.BluetoothGattCharacteristic;
+import android.bluetooth.BluetoothGattService;
 import android.bluetooth.BluetoothManager;
+import android.bluetooth.BluetoothProfile;
 import android.bluetooth.le.BluetoothLeScanner;
 import android.bluetooth.le.ScanResult;
 import android.content.Context;
@@ -17,21 +22,21 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
+import android.widget.LinearLayout;
+import android.widget.TextView;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
-import androidx.activity.result.contract.ActivityResultContracts.RequestPermission;
 import androidx.annotation.NonNull;
 import androidx.annotation.RequiresApi;
 import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
-import androidx.navigation.fragment.NavHostFragment;
 
-import java.lang.reflect.Array;
-import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import me.clarius.sdk.solum.example.databinding.FragmentBluetoothBinding;
 
@@ -51,8 +56,9 @@ public class BluetoothFragment extends Fragment implements DeviceReceiver {
 
     private FragmentBluetoothBinding binding;
     private boolean bluetoothPermissionsGranted = false;
-    private ArrayAdapter<String> deviceListAdapter;
-    private Map<String, DeviceIdentifier> deviceMap = new HashMap<String, DeviceIdentifier>();
+    private ArrayAdapter<BTDevice> deviceListAdapter;
+    private Map<String, BTDevice> deviceMap = new HashMap<String, BTDevice>();
+    private BTDevice selectedDevice = null;
 
     private final ActivityResultLauncher<String[]> bluetoothPermissionLauncher = registerForActivityResult(new ActivityResultContracts.RequestMultiplePermissions(), this::onBluetoothPermissionUpdate);
 
@@ -128,7 +134,7 @@ public class BluetoothFragment extends Fragment implements DeviceReceiver {
                 new AdapterView.OnItemSelectedListener() {
                     @Override
                     public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                        String probe = deviceListAdapter.getItem(position);
+                        selectedDevice = deviceListAdapter.getItem(position);
                     }
 
                     @Override
@@ -141,6 +147,15 @@ public class BluetoothFragment extends Fragment implements DeviceReceiver {
             updateDeviceList(checked);
         });
 
+        binding.connectBtn.setOnClickListener(v -> {
+            if (connectionState == BluetoothProfile.STATE_CONNECTED) {
+                disconnect();
+            } else {
+                connect();
+            }
+        });
+
+        updateConnectionUI();
         updateBluetoothPermissionsLabel();
         setupBluetooth();
     }
@@ -148,6 +163,8 @@ public class BluetoothFragment extends Fragment implements DeviceReceiver {
     private BluetoothManager btManager;
     private BluetoothAdapter btAdapter;
     private BluetoothLeScanner leScanner;
+    private BluetoothGatt gattClient;
+    private List<BluetoothGattService> services;
     ScanStatus scanStatus = ScanStatus.STOPPED;
     ScanCallback currentScan = null;
 
@@ -218,10 +235,11 @@ public class BluetoothFragment extends Fragment implements DeviceReceiver {
         binding = null;
     }
 
-    class DeviceIdentifier {
+    class BTDevice {
         public String address = null;
         public String name = null;
         public String alias = null;
+        public BluetoothDevice device = null;
 
         public boolean isUnnamed() {
             return name == null && alias == null;
@@ -242,25 +260,135 @@ public class BluetoothFragment extends Fragment implements DeviceReceiver {
 
     @Override
     public void addDevice(ScanResult result) {
-        DeviceIdentifier identifier = new DeviceIdentifier();
-        identifier.address = result.getDevice().getAddress();
+        BTDevice device = new BTDevice();
+        device.device = result.getDevice();
+        device.address = result.getDevice().getAddress();
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                identifier.alias = result.getDevice().getAlias();
-                identifier.name = result.getDevice().getName();
+                device.alias = result.getDevice().getAlias();
+                device.name = result.getDevice().getName();
             }
         } catch (SecurityException ignored) {}
 
-        deviceMap.putIfAbsent(identifier.address, identifier);
-        updateDeviceList(binding.showUnnamedDevices.isChecked());
+        if (deviceMap.putIfAbsent(device.address, device) == null) {
+            updateDeviceList(binding.showUnnamedDevices.isChecked());
+        }
     }
 
     private void updateDeviceList(boolean showUnnamedDevices) {
         deviceListAdapter.clear();
-        for (DeviceIdentifier identifier : deviceMap.values()) {
-            if (!identifier.isUnnamed() || showUnnamedDevices) {
-                deviceListAdapter.add(identifier.toString());
+        for (BTDevice device : deviceMap.values()) {
+            if (!device.isUnnamed() || showUnnamedDevices) {
+                deviceListAdapter.add(device);
             }
+        }
+    }
+
+
+    private final BluetoothGattCallback gattCallback = new BluetoothGattCallback() {
+        @Override
+        public void onConnectionStateChange(BluetoothGatt gatt, int status, int newState) {
+            binding.getRoot().post(() -> updateBluetoothConnection(newState));
+        }
+
+        @Override
+        public void onServicesDiscovered(BluetoothGatt gatt, int status) {
+            if (status == BluetoothGatt.GATT_SUCCESS) {
+                binding.getRoot().post(() -> updateServices());
+            } else {
+                Log.w("BluetoothFragment", "onServicesDiscovered received: " + status);
+            }
+        }
+    };
+
+    private int connectionState = BluetoothProfile.STATE_DISCONNECTED;
+
+    private void connect() {
+        if (selectedDevice == null) {
+            return;
+        }
+        try {
+            gattClient = selectedDevice.device.connectGatt(requireContext(), true, gattCallback);
+        } catch (SecurityException ignored) {}
+    }
+
+    private void disconnect() {
+        if (gattClient != null) {
+            try {
+                gattClient.disconnect();
+            } catch (SecurityException ignored) {}
+            gattClient = null;
+            services = null;
+            clearServices();
+        }
+    }
+
+    private void updateServices() {
+        if (gattClient == null) {
+            return;
+        }
+        services = gattClient.getServices();
+        clearServices();
+        for (BluetoothGattService service: services) {
+            displayServiceInfo(service);
+        }
+    }
+
+    public void updateBluetoothConnection(int newState) {
+        connectionState = newState;
+        updateConnectionUI();
+        try {
+            switch (connectionState) {
+                case BluetoothProfile.STATE_CONNECTED:
+                    gattClient.discoverServices();
+                    break;
+            }
+        } catch (SecurityException ignored) {}
+    }
+
+    private void updateConnectionUI() {
+        String connectionStatus = "N/A";
+        String buttonText = "Connect";
+        switch(connectionState) {
+            case BluetoothProfile.STATE_DISCONNECTED: connectionStatus = "disconnected"; break;
+            case BluetoothProfile.STATE_CONNECTED: connectionStatus = "connected"; buttonText = "Disconnect"; break;
+            case BluetoothProfile.STATE_CONNECTING: connectionStatus = "connecting"; break;
+            case BluetoothProfile.STATE_DISCONNECTING: connectionStatus = "disconnecting"; break;
+        }
+        binding.connectionStatus.setText(connectionStatus);
+        binding.connectBtn.setText(buttonText);
+    }
+
+    @Override
+    public void onPause() {
+        super.onPause();
+        disconnect();
+    }
+
+    private void clearServices() {
+        binding.services.removeAllViews();
+    }
+
+    private void displayServiceInfo(BluetoothGattService service) {
+        UUID serviceUuid = service.getUuid();
+        ArrayList<UUID> characteristics = new ArrayList<>();
+        for (BluetoothGattCharacteristic c : service.getCharacteristics()) {
+            characteristics.add(c.getUuid());
+        }
+        TextView serviceView = new TextView(requireContext());
+        serviceView.setLayoutParams(new ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+        serviceView.setText("service: " + serviceUuid.toString());
+        binding.services.addView(serviceView);
+
+        for (UUID characteristicUUID : characteristics) {
+            TextView cView = new TextView(requireContext());
+            cView.setLayoutParams(new ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT));
+            cView.setText("-- char: " + characteristicUUID.toString());
+            binding.services.addView(cView);
         }
     }
 }

@@ -14,7 +14,7 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintBottom_toBottomOf="parent">
+        app:layout_constraintBottom_toTopOf="@id/services_scroll_view">
 
         <LinearLayout
             android:id="@+id/bluetooth_permissions_layout"
@@ -106,5 +106,54 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"/>
         </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginRight="16dp"
+                android:text="Connection status"/>
+
+            <TextView
+                android:id="@+id/connection_status"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginRight="16dp"
+                android:text="N/A"/>
+
+            <Button
+                android:id="@+id/connectBtn"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Connect"/>
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Services + Characteristics"/>
+
+
     </LinearLayout>
+
+    <ScrollView
+        android:id="@+id/services_scroll_view"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/main"
+        app:layout_constraintBottom_toBottomOf="parent"
+        android:padding="16dp"
+        >
+        <LinearLayout
+            android:id="@+id/services"
+            android:orientation="vertical"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content">
+        </LinearLayout>
+    </ScrollView>
 </androidx.constraintlayout.widget.ConstraintLayout>
