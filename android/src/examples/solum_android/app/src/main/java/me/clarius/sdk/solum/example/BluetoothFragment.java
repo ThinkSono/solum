@@ -33,6 +33,7 @@ import androidx.annotation.RequiresApi;
 import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -158,7 +159,6 @@ public class BluetoothFragment extends Fragment implements DeviceReceiver {
 
         binding.readPowerBtn.setOnClickListener(v -> {
             readCharacteristic(powerServiceUUID, powerPublishedUUID);
-            subscribePower();
         });
 
         binding.setPowerBtn.setOnClickListener(v -> {
@@ -169,6 +169,10 @@ public class BluetoothFragment extends Fragment implements DeviceReceiver {
                 payload = new byte[] {1};
             }
             writeCharacteristic(powerServiceUUID, powerRequestUUID, payload);
+        });
+
+        binding.wifiBtn.setOnClickListener(v -> {
+            readCharacteristic(wifiServiceUUID, wifiPublishedUUID);
         });
 
         updateConnectionUI();
@@ -330,9 +334,13 @@ public class BluetoothFragment extends Fragment implements DeviceReceiver {
         @Override
         public void onCharacteristicRead(@NonNull BluetoothGatt gatt, @NonNull BluetoothGattCharacteristic characteristic, int status) {
             byte[] value = characteristic.getValue();
-            if (status == BluetoothGatt.GATT_SUCCESS && characteristic.getUuid().equals(powerPublishedUUID)) {
-                Log.d("BluetoothFragment", "updateProbePower");
-                binding.getRoot().post(() -> updateProbePower(value));
+            if (status == BluetoothGatt.GATT_SUCCESS) {
+                if (characteristic.getUuid().equals(powerPublishedUUID)) {
+                    Log.d("BluetoothFragment", "updateProbePower");
+                    binding.getRoot().post(() -> updateProbePower(value));
+                } else if (characteristic.getUuid().equals(wifiPublishedUUID)) {
+                    binding.getRoot().post(() -> updateWifi(value));
+                }
             }
         }
 
@@ -379,6 +387,9 @@ public class BluetoothFragment extends Fragment implements DeviceReceiver {
                 characteristics.put(c.getUuid(), c);
             }
         }
+        try {
+            gattClient.requestMtu(512);
+        } catch (SecurityException ignored) {};
     }
 
     public void updateBluetoothConnection(int newState) {
@@ -448,22 +459,13 @@ public class BluetoothFragment extends Fragment implements DeviceReceiver {
         try {
             boolean initialized = gattClient.readCharacteristic(characteristic);
             Log.d("BluetoothFragment", "Read request initialized: " + initialized);
-            byte[] newValue = characteristic.getValue();
-            if (newValue != null) {
-                String display = "0x";
-                for (byte b : newValue) {
-                    display += Byte.toString(b);
-                }
-                Log.d("BluetoothFragment", "Value of characteristic after read dispatch " + display);
-            }
         } catch (SecurityException e) {
             Log.e("BluetoothFragment", "Not allowed to read characteristic. Check app permissions.");
         }
     }
 
-    @SuppressLint("NewApi")
-    public void subscribePower() {
-        BluetoothGattCharacteristic characteristic = findCharacteristic(powerServiceUUID, powerPublishedUUID);
+    public void subscribeCharacteristic(UUID serviceUUID, UUID characteristicUUID) {
+        BluetoothGattCharacteristic characteristic = findCharacteristic(serviceUUID, characteristicUUID);
         if(characteristic == null) return;
 
         Log.d("BluetoothFragment", "Subscribing to characteristic " + characteristic.getUuid().toString());
@@ -521,6 +523,13 @@ public class BluetoothFragment extends Fragment implements DeviceReceiver {
         } else {
             binding.setPowerBtn.setText("Power on");
         }
+    }
+
+    public void updateWifi(byte[] wifiInfo) {
+        if (wifiInfo == null) return;
+        Log.d("BluetoothFragment", "updateWifi called with length " + wifiInfo.length);
+        String text = new String(wifiInfo, StandardCharsets.US_ASCII).replace('\n', ',');
+        binding.wifiInfo.setText(text);
     }
 
     static String payloadToHex(byte[] payload) {
