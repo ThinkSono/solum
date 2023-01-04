@@ -7,6 +7,7 @@ import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothGatt;
 import android.bluetooth.BluetoothGattCallback;
 import android.bluetooth.BluetoothGattCharacteristic;
+import android.bluetooth.BluetoothGattDescriptor;
 import android.bluetooth.BluetoothGattService;
 import android.bluetooth.BluetoothManager;
 import android.bluetooth.BluetoothProfile;
@@ -42,7 +43,7 @@ import me.clarius.sdk.solum.example.databinding.FragmentBluetoothBinding;
 
 
 interface DeviceReceiver {
-    public void addDevice(ScanResult result);
+    void addDevice(ScanResult result);
 }
 
 
@@ -57,7 +58,7 @@ public class BluetoothFragment extends Fragment implements DeviceReceiver {
     private FragmentBluetoothBinding binding;
     private boolean bluetoothPermissionsGranted = false;
     private ArrayAdapter<BTDevice> deviceListAdapter;
-    private Map<String, BTDevice> deviceMap = new HashMap<String, BTDevice>();
+    private Map<String, BTDevice> deviceMap = new HashMap<>();
     private BTDevice selectedDevice = null;
 
     private final ActivityResultLauncher<String[]> bluetoothPermissionLauncher = registerForActivityResult(new ActivityResultContracts.RequestMultiplePermissions(), this::onBluetoothPermissionUpdate);
@@ -155,6 +156,21 @@ public class BluetoothFragment extends Fragment implements DeviceReceiver {
             }
         });
 
+        binding.readPowerBtn.setOnClickListener(v -> {
+            readCharacteristic(powerServiceUUID, powerPublishedUUID);
+            subscribePower();
+        });
+
+        binding.setPowerBtn.setOnClickListener(v -> {
+            byte[] payload;
+            if (probePowered) {
+                payload = new byte[] {0};
+            } else {
+                payload = new byte[] {1};
+            }
+            writeCharacteristic(powerServiceUUID, powerRequestUUID, payload);
+        });
+
         updateConnectionUI();
         updateBluetoothPermissionsLabel();
         setupBluetooth();
@@ -167,6 +183,17 @@ public class BluetoothFragment extends Fragment implements DeviceReceiver {
     private List<BluetoothGattService> services;
     ScanStatus scanStatus = ScanStatus.STOPPED;
     ScanCallback currentScan = null;
+    boolean probePowered = false;
+
+    static final UUID powerServiceUUID = UUID.fromString("8C853B6A-2297-44C1-8277-73627C8D2ABC");
+    static final UUID powerPublishedUUID = UUID.fromString("8C853B6A-2297-44C1-8277-73627C8D2ABD");
+    static final UUID powerRequestUUID = UUID.fromString("8C853B6A-2297-44C1-8277-73627C8D2ABE");
+    static final UUID wifiServiceUUID = UUID.fromString("F9EB3FAE-947A-4E5B-AB7C-C799E91ED780");
+    static final UUID wifiPublishedUUID = UUID.fromString("F9EB3FAE-947A-4E5B-AB7C-C799E91ED781");
+    static final UUID wifiRequestUUID = UUID.fromString("F9EB3FAE-947A-4E5B-AB7C-C799E91ED782");
+    static final UUID configurationDescriptorUUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb");
+
+    private Map<UUID, BluetoothGattCharacteristic> characteristics = new HashMap<>();
 
     private void setupBluetooth() {
         btManager = (BluetoothManager) requireContext().getSystemService(Context.BLUETOOTH_SERVICE);
@@ -299,6 +326,23 @@ public class BluetoothFragment extends Fragment implements DeviceReceiver {
                 Log.w("BluetoothFragment", "onServicesDiscovered received: " + status);
             }
         }
+
+        @Override
+        public void onCharacteristicRead(@NonNull BluetoothGatt gatt, @NonNull BluetoothGattCharacteristic characteristic, int status) {
+            byte[] value = characteristic.getValue();
+            if (status == BluetoothGatt.GATT_SUCCESS && characteristic.getUuid().equals(powerPublishedUUID)) {
+                Log.d("BluetoothFragment", "updateProbePower");
+                binding.getRoot().post(() -> updateProbePower(value));
+            }
+        }
+
+        @Override
+        public void onCharacteristicChanged(@NonNull BluetoothGatt gatt, @NonNull BluetoothGattCharacteristic characteristic) {
+            byte[] value = characteristic.getValue();
+            if(value != null) {
+                binding.getRoot().post(() -> updateProbePower(value));
+            }
+        }
     };
 
     private int connectionState = BluetoothProfile.STATE_DISCONNECTED;
@@ -331,6 +375,9 @@ public class BluetoothFragment extends Fragment implements DeviceReceiver {
         clearServices();
         for (BluetoothGattService service: services) {
             displayServiceInfo(service);
+            for (BluetoothGattCharacteristic c : service.getCharacteristics()) {
+                characteristics.put(c.getUuid(), c);
+            }
         }
     }
 
@@ -367,6 +414,7 @@ public class BluetoothFragment extends Fragment implements DeviceReceiver {
 
     private void clearServices() {
         binding.services.removeAllViews();
+        characteristics.clear();
     }
 
     private void displayServiceInfo(BluetoothGattService service) {
@@ -390,5 +438,99 @@ public class BluetoothFragment extends Fragment implements DeviceReceiver {
             cView.setText("-- char: " + characteristicUUID.toString());
             binding.services.addView(cView);
         }
+    }
+
+    private void readCharacteristic(UUID serviceUUID, UUID characteristicUUID) {
+        BluetoothGattCharacteristic characteristic = findCharacteristic(serviceUUID, characteristicUUID);
+        if(characteristic == null) return;
+
+        Log.d("BluetoothFragment", "Dispatching read of characteristic " + characteristic.getUuid().toString());
+        try {
+            boolean initialized = gattClient.readCharacteristic(characteristic);
+            Log.d("BluetoothFragment", "Read request initialized: " + initialized);
+            byte[] newValue = characteristic.getValue();
+            if (newValue != null) {
+                String display = "0x";
+                for (byte b : newValue) {
+                    display += Byte.toString(b);
+                }
+                Log.d("BluetoothFragment", "Value of characteristic after read dispatch " + display);
+            }
+        } catch (SecurityException e) {
+            Log.e("BluetoothFragment", "Not allowed to read characteristic. Check app permissions.");
+        }
+    }
+
+    @SuppressLint("NewApi")
+    public void subscribePower() {
+        BluetoothGattCharacteristic characteristic = findCharacteristic(powerServiceUUID, powerPublishedUUID);
+        if(characteristic == null) return;
+
+        Log.d("BluetoothFragment", "Subscribing to characteristic " + characteristic.getUuid().toString());
+        try {
+             gattClient.setCharacteristicNotification(characteristic, true);
+             BluetoothGattDescriptor configDescriptor = characteristic.getDescriptor(configurationDescriptorUUID);
+             configDescriptor.setValue(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE);
+             gattClient.writeDescriptor(configDescriptor);
+        } catch (SecurityException e) {
+            Log.e("BluetoothFragment", "Not allowed to write characteristic. Check app permissions.");
+        }
+    }
+
+    private void writeCharacteristic(UUID serviceUUID, UUID characteristicUUID, byte[] value) {
+        BluetoothGattCharacteristic characteristic = findCharacteristic(serviceUUID, characteristicUUID);
+        if(characteristic == null) return;
+        Log.d("BluetoothFragment", "Dispatching write of characteristic " + characteristic.getUuid().toString());
+        try {
+            characteristic.setValue(value);
+            characteristic.setWriteType(BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE);
+            gattClient.writeCharacteristic(characteristic);
+        } catch (SecurityException e) {
+            Log.e("BluetoothFragment", "Not allowed to read characteristic. Check app permissions.");
+        }
+    }
+
+    private BluetoothGattCharacteristic findCharacteristic(UUID serviceUUID, UUID characteristicUUID) {
+        if (gattClient == null) {
+            Log.e("BluetoothFragment", "Bluetooth not connected");
+            return null;
+        }
+        BluetoothGattService service = gattClient.getService(serviceUUID);
+        if (service == null) {
+            Log.e("BluetoothFragment", "Could not find service " + serviceUUID.toString());
+            return null;
+        }
+        BluetoothGattCharacteristic characteristic = service.getCharacteristic(characteristicUUID);
+        if (characteristic == null) {
+            Log.e("BluetoothFragment", "Could not find characteristic " + characteristicUUID.toString());
+            return null;
+        }
+        return characteristic;
+    }
+
+    public void updateProbePower(byte[] power) {
+        probePowered = false;
+        for (byte b : power) {
+            if (b > 0) {
+                probePowered = true;
+            }
+        }
+        binding.powerStatus.setText(payloadToHex(power));
+        if (probePowered) {
+            binding.setPowerBtn.setText("Power off");
+        } else {
+            binding.setPowerBtn.setText("Power on");
+        }
+    }
+
+    static String payloadToHex(byte[] payload) {
+        if (payload == null) {
+            return "null";
+        }
+        String hex = "0x";
+        for (byte b : payload) {
+            hex += Byte.toString(b);
+        }
+        return hex;
     }
 }
