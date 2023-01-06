@@ -32,6 +32,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.RequiresApi;
 import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
+import androidx.lifecycle.ViewModelProvider;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -61,6 +62,7 @@ public class BluetoothFragment extends Fragment implements DeviceReceiver {
     private ArrayAdapter<BTDevice> deviceListAdapter;
     private Map<String, BTDevice> deviceMap = new HashMap<>();
     private BTDevice selectedDevice = null;
+    private ProbeStore probeStore;
 
     private final ActivityResultLauncher<String[]> bluetoothPermissionLauncher = registerForActivityResult(new ActivityResultContracts.RequestMultiplePermissions(), this::onBluetoothPermissionUpdate);
 
@@ -116,6 +118,8 @@ public class BluetoothFragment extends Fragment implements DeviceReceiver {
 
     public void onViewCreated(@NonNull View view, Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
+
+        probeStore = new ViewModelProvider(requireActivity()).get(ProbeStore.class);
 
         binding.toggleScanBtn.setOnClickListener(v -> {
             if (scanStatus == ScanStatus.SCANNING) {
@@ -304,6 +308,15 @@ public class BluetoothFragment extends Fragment implements DeviceReceiver {
         if (deviceMap.putIfAbsent(device.address, device) == null) {
             updateDeviceList(binding.showUnnamedDevices.isChecked());
         }
+
+        if (device.name != null && device.name.matches("^CUS-.*$")) {
+            if (!probeStore.probeMap.containsKey(device.name)) {
+                Probe probe = new Probe();
+                probe.bluetoothAddr = device.address;
+                probe.name = device.name;
+                probeStore.probeMap.put(probe.name, probe);
+            }
+        }
     }
 
     private void updateDeviceList(boolean showUnnamedDevices) {
@@ -319,7 +332,11 @@ public class BluetoothFragment extends Fragment implements DeviceReceiver {
     private final BluetoothGattCallback gattCallback = new BluetoothGattCallback() {
         @Override
         public void onConnectionStateChange(BluetoothGatt gatt, int status, int newState) {
-            binding.getRoot().post(() -> updateBluetoothConnection(newState));
+            binding.getRoot().post(() -> {
+                try {
+                    updateBluetoothConnection(newState);
+                } catch (Exception ignored) {}
+            });
         }
 
         @Override
@@ -528,8 +545,19 @@ public class BluetoothFragment extends Fragment implements DeviceReceiver {
     public void updateWifi(byte[] wifiInfo) {
         if (wifiInfo == null) return;
         Log.d("BluetoothFragment", "updateWifi called with length " + wifiInfo.length);
-        String text = new String(wifiInfo, StandardCharsets.US_ASCII).replace('\n', ',');
+        String payload = new String(wifiInfo, StandardCharsets.US_ASCII);
+        String text = payload.replace('\n', ',');
         binding.wifiInfo.setText(text);
+
+        BTDevice device =  deviceMap.get(gattClient.getDevice().getAddress());
+        Probe probe = null;
+        if (device != null && device.name != null) {
+            probe = probeStore.probeMap.get(device.name);
+        }
+        if (probe != null) {
+            probe.wifiInfo = WifiInfo.fromPayload(payload);
+            Log.d("BluetoothFragment", "Update wifi info for probe " + probe);
+        }
     }
 
     static String payloadToHex(byte[] payload) {

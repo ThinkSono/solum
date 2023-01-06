@@ -20,6 +20,8 @@ import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.AdapterView;
+import android.widget.ArrayAdapter;
 
 import java.util.Map;
 
@@ -29,7 +31,9 @@ public class WifiFragment extends Fragment {
 
     private FragmentWifiBinding binding;
     private Antenna antenna;
+    private ProbeStore probeStore;
     private boolean connectButtonEnabled = true;
+    private ArrayAdapter<Probe> probeListAdapter;
 
     private boolean permissionsGranted = false;
 
@@ -73,6 +77,7 @@ public class WifiFragment extends Fragment {
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
         antenna = new ViewModelProvider(requireActivity()).get(Antenna.class);
+        probeStore = new ViewModelProvider(requireActivity()).get(ProbeStore.class);
         binding = FragmentWifiBinding.bind(view);
 
         binding.connectWifi.setOnClickListener(v -> {
@@ -119,6 +124,40 @@ public class WifiFragment extends Fragment {
             binding.wifiPassword.setText(passphrase);
         });
 
+        probeListAdapter = new ArrayAdapter<>(requireContext(), android.R.layout.simple_spinner_item);
+        probeListAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+
+        for (Probe probe : probeStore.probeMap.values()) {
+            probeListAdapter.add(probe);
+        }
+        binding.probeList.setAdapter(probeListAdapter);
+        binding.probeList.setOnItemSelectedListener(
+                new AdapterView.OnItemSelectedListener() {
+                    @Override
+                    public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                        Probe probe = probeListAdapter.getItem(position);
+                        updateSelectedProbe(probe);
+                    }
+
+                    @Override
+                    public void onNothingSelected(AdapterView<?> parent) {
+                    }
+                }
+        );
+
         updatePermissionLabel();
+    }
+
+    private void updateSelectedProbe(Probe probe) {
+        if (probe == null) {
+            Log.d("WifiFragment", "Selected probe is null");
+            return;
+        }
+        Log.d("WifiFragment", "Select probe " + probe.name);
+        if (probe.wifiInfo != null) {
+            Log.d("WifiFragment", "Set Probe wifi info");
+            binding.wifiPrefix.setText(probe.wifiInfo.ssid);
+            binding.wifiPassword.setText(probe.wifiInfo.passphrase);
+        }
     }
 }

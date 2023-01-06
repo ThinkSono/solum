@@ -9,6 +9,8 @@ import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.AdapterView;
+import android.widget.ArrayAdapter;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
@@ -56,6 +58,8 @@ public class FirstFragment extends Fragment {
     private SolumViewModel viewModel;
     private WorkflowViewModel workflowViewModel;
     private ImageConverter imageConverter;
+    private ProbeStore probeStore;
+    private ArrayAdapter<Probe> probeListAdapter;
     private final Solum.Listener solumListener = new Solum.Listener() {
         @Override
         public void error(String msg) {
@@ -147,6 +151,26 @@ public class FirstFragment extends Fragment {
         });
         solum.setProbeSettings(new ProbeSettings());
 
+        probeStore = new ViewModelProvider(requireActivity()).get(ProbeStore.class);
+        probeListAdapter = new ArrayAdapter<>(requireContext(), android.R.layout.simple_spinner_item);
+        probeListAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        updateProbeList();
+
+        binding.probeList.setAdapter(probeListAdapter);
+        binding.probeList.setOnItemSelectedListener(
+                new AdapterView.OnItemSelectedListener() {
+                    @Override
+                    public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                        Probe probe = probeListAdapter.getItem(position);
+                        updateSelectedProbe(probe);
+                    }
+
+                    @Override
+                    public void onNothingSelected(AdapterView<?> parent) {
+                    }
+                }
+        );
+
         workflowViewModel = new ViewModelProvider(requireActivity()).get(WorkflowViewModel.class);
         workflowViewModel.getSelectedProbe().observe(getViewLifecycleOwner(),
                 currentProbe -> workflowViewModel.refreshApplications(solum, currentProbe));
@@ -155,6 +179,9 @@ public class FirstFragment extends Fragment {
 
         binding.buttonBluetooth.setOnClickListener(view1 -> NavHostFragment.findNavController(FirstFragment.this)
                 .navigate(R.id.action_FirstFragment_to_BluetoothFragment));
+
+        binding.buttonWifi.setOnClickListener(v -> NavHostFragment.findNavController(FirstFragment.this)
+                .navigate(R.id.action_FirstFragment_to_wifiFragment));
 
         binding.buttonConnect.setOnClickListener(v -> doConnect());
         binding.buttonDisconnect.setOnClickListener(v -> doDisconnect());
@@ -324,5 +351,27 @@ public class FirstFragment extends Fragment {
         public void onError(Exception e) {
             showError("Error while converting image: " + e);
         }
+    }
+
+    private void updateSelectedProbe(Probe probe) {
+        if (probe != null && probe.wifiInfo != null) {
+            binding.ipAddress.setText(probe.wifiInfo.ipAddr);
+            binding.tcpPort.setText(Integer.toString(probe.wifiInfo.controlPort));
+        }
+    }
+
+    private void updateProbeList() {
+        Log.d("FirstFragment", "Update probe list");
+        probeListAdapter.clear();
+        for (Probe probe : probeStore.probeMap.values()) {
+            Log.d("FirstFragment", "Adding probe");
+            probeListAdapter.add(probe);
+        }
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        updateProbeList();
     }
 }
