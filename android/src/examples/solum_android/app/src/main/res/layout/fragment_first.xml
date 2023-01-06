@@ -6,15 +6,27 @@
     android:layout_height="match_parent"
     tools:context=".FirstFragment">
 
-    <Button
-        android:id="@+id/button_bluetooth"
-        android:layout_width="wrap_content"
+    <LinearLayout
+        android:orientation="horizontal"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:text="@string/bluetooth"
         app:layout_constraintBottom_toTopOf="@id/connection_layout"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        app:layout_constraintTop_toTopOf="parent"
+        android:id="@+id/buttons">
+        <Button
+            android:id="@+id/button_bluetooth"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginRight="16dp"
+            android:text="@string/bluetooth"/>
+        <Button
+            android:id="@+id/button_wifi"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="WIFI" />
+    </LinearLayout>
 
     <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/connection_layout"
@@ -23,7 +35,7 @@
         app:layout_constraintBottom_toTopOf="@id/connection_layout_flow"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/button_bluetooth">
+        app:layout_constraintTop_toBottomOf="@id/buttons">
 
         <com.google.android.material.textfield.TextInputLayout
             android:id="@+id/ip_address_layout"
@@ -103,7 +115,8 @@
         app:layout_constraintBottom_toTopOf="@id/button_load_application"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/connection_layout" />
+        app:layout_constraintTop_toBottomOf="@+id/connection_layout"
+        tools:layout="@layout/simple_spinner_dropdown_item" />
 
     <Button
         android:id="@+id/button_load_application"

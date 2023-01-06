@@ -14,6 +14,9 @@
         <action
             android:id="@+id/action_FirstFragment_to_BluetoothFragment"
             app:destination="@id/BluetoothFragment" />
+        <action
+            android:id="@+id/action_FirstFragment_to_wifiFragment"
+            app:destination="@id/wifiFragment" />
     </fragment>
     <fragment
         android:id="@+id/BluetoothFragment"
@@ -23,6 +26,15 @@
 
         <action
             android:id="@+id/action_BluetoothFragment_to_FirstFragment"
+            app:destination="@id/FirstFragment" />
+    </fragment>
+    <fragment
+        android:id="@+id/wifiFragment"
+        android:name="me.clarius.sdk.solum.example.WifiFragment"
+        android:label="@string/wifi_fragment_label"
+        tools:layout="@layout/fragment_wifi">
+        <action
+            android:id="@+id/action_wifiFragment_to_FirstFragment"
             app:destination="@id/FirstFragment" />
     </fragment>
 </navigation>
