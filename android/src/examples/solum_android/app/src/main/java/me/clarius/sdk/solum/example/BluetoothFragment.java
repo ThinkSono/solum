@@ -206,12 +206,12 @@ public class BluetoothFragment extends Fragment implements DeviceReceiver {
             return;
         }
         btAdapter = btManager.getAdapter();
-        if (btManager == null) {
+        if (btAdapter == null) {
             Log.e("BluetoothFragment", "BluetoothAdapter is null");
             return;
         }
         leScanner = btAdapter.getBluetoothLeScanner();
-        if (btManager == null) {
+        if (leScanner == null) {
             Log.e("BluetoothFragment", "BluetoothLeScanner is null");
             return;
         }
