@@ -3,38 +3,44 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/nav_graph"
-    app:startDestination="@id/FirstFragment">
+    app:startDestination="@id/mainMenuFragment">
 
     <fragment
         android:id="@+id/FirstFragment"
         android:name="me.clarius.sdk.solum.example.FirstFragment"
         android:label="@string/first_fragment_label"
-        tools:layout="@layout/fragment_first">
-
-        <action
-            android:id="@+id/action_FirstFragment_to_BluetoothFragment"
-            app:destination="@id/BluetoothFragment" />
-        <action
-            android:id="@+id/action_FirstFragment_to_wifiFragment"
-            app:destination="@id/wifiFragment" />
-    </fragment>
+        tools:layout="@layout/fragment_first"/>
     <fragment
         android:id="@+id/BluetoothFragment"
         android:name="me.clarius.sdk.solum.example.BluetoothFragment"
         android:label="@string/bluetooth_fragment_label"
-        tools:layout="@layout/fragment_bluetooth">
-
-        <action
-            android:id="@+id/action_BluetoothFragment_to_FirstFragment"
-            app:destination="@id/FirstFragment" />
-    </fragment>
+        tools:layout="@layout/fragment_bluetooth"/>
     <fragment
         android:id="@+id/wifiFragment"
         android:name="me.clarius.sdk.solum.example.WifiFragment"
         android:label="@string/wifi_fragment_label"
-        tools:layout="@layout/fragment_wifi">
+        tools:layout="@layout/fragment_wifi"/>
+    <fragment
+        android:id="@+id/mainMenuFragment"
+        android:name="me.clarius.sdk.solum.example.MainMenuFragment"
+        android:label="Main Menu"
+        tools:layout="@layout/fragment_main_menu" >
         <action
-            android:id="@+id/action_wifiFragment_to_FirstFragment"
+            android:id="@+id/action_mainMenuFragment_to_FirstFragment"
             app:destination="@id/FirstFragment" />
+        <action
+            android:id="@+id/action_mainMenuFragment_to_BluetoothFragment"
+            app:destination="@id/BluetoothFragment" />
+        <action
+            android:id="@+id/action_mainMenuFragment_to_wifiFragment"
+            app:destination="@id/wifiFragment" />
+        <action
+            android:id="@+id/action_mainMenuFragment_to_probeFragment"
+            app:destination="@id/probeFragment" />
     </fragment>
+    <fragment
+        android:id="@+id/probeFragment"
+        android:name="me.clarius.sdk.solum.example.ProbeFragment"
+        android:label="Auto Connection"
+        tools:layout="@layout/fragment_probe" />
 </navigation>

@@ -177,12 +177,6 @@ public class FirstFragment extends Fragment {
 
         imageConverter = new ImageConverter(executorService, new ImageCallback(viewModel.getProcessedImage()));
 
-        binding.buttonBluetooth.setOnClickListener(view1 -> NavHostFragment.findNavController(FirstFragment.this)
-                .navigate(R.id.action_FirstFragment_to_BluetoothFragment));
-
-        binding.buttonWifi.setOnClickListener(v -> NavHostFragment.findNavController(FirstFragment.this)
-                .navigate(R.id.action_FirstFragment_to_wifiFragment));
-
         binding.buttonConnect.setOnClickListener(v -> doConnect());
         binding.buttonDisconnect.setOnClickListener(v -> doDisconnect());
         binding.buttonRun.setOnClickListener(v -> toggleRun());

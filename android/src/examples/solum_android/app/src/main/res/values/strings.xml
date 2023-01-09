@@ -2,7 +2,7 @@
     <string name="app_name">Solum Example</string>
     <string name="action_settings">Settings</string>
     <!-- Strings used for fragments for navigation -->
-    <string name="first_fragment_label">Image</string>
+    <string name="first_fragment_label">Solum</string>
     <string name="bluetooth_fragment_label">Bluetooth</string>
     <string name="bluetooth">Bluetooth</string>
     <string name="wifi_fragment_label">Wifi</string>
