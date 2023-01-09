@@ -197,6 +197,7 @@ public class BluetoothFragment extends Fragment {
     }
 
     private void updateServicesUI(List<BluetoothGattService> services) {
+        binding.services.removeAllViews();
         for (BluetoothGattService service : services) {
             displayServiceInfo(service);
         }
