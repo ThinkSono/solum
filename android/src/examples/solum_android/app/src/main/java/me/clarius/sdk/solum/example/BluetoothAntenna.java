@@ -29,8 +29,10 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
 import java.util.UUID;
 
 interface DeviceReceiver {
@@ -63,6 +65,7 @@ public class BluetoothAntenna extends AndroidViewModel implements DeviceReceiver
     private BluetoothLeScanner leScanner;
     private BluetoothGatt gattClient;
     private ScanCallback currentScan = null;
+    private BluetoothOperator operator = new BluetoothOperator();
 
     static final UUID powerServiceUUID = UUID.fromString("8C853B6A-2297-44C1-8277-73627C8D2ABC");
     static final UUID powerPublishedUUID = UUID.fromString("8C853B6A-2297-44C1-8277-73627C8D2ABD");
@@ -161,6 +164,7 @@ public class BluetoothAntenna extends AndroidViewModel implements DeviceReceiver
                 gattClient.disconnect();
             } catch (SecurityException ignored) {}
             gattClient = null;
+            operator.clear();
             clearServices();
         }
     }
@@ -207,6 +211,7 @@ public class BluetoothAntenna extends AndroidViewModel implements DeviceReceiver
             } else {
                 Log.w("BluetoothFragment", "onServicesDiscovered received: " + status);
             }
+            operator.commandFinished();
         }
 
         @Override
@@ -220,14 +225,36 @@ public class BluetoothAntenna extends AndroidViewModel implements DeviceReceiver
                     updateWifi(value);
                 }
             }
+            operator.commandFinished();
         }
 
         @Override
         public void onCharacteristicChanged(@NonNull BluetoothGatt gatt, @NonNull BluetoothGattCharacteristic characteristic) {
             byte[] value = characteristic.getValue();
-            if(value != null) {
+            if (characteristic.getUuid().equals(powerPublishedUUID)) {
+                Log.d("BluetoothFragment", "updateProbePower");
                 updateProbePower(value);
+            } else if (characteristic.getUuid().equals(wifiPublishedUUID)) {
+                updateWifi(value);
             }
+        }
+
+        @Override
+        public void onCharacteristicWrite(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic, int status) {
+            Log.d("BluetoothFragment", "onCharacteristicWrite");
+            operator.commandFinished();
+        }
+
+        @Override
+        public void onDescriptorWrite(BluetoothGatt gatt, BluetoothGattDescriptor descriptor, int status) {
+            Log.d("BluetoothFragment", "onDescriptorWrite");
+            operator.commandFinished();
+        }
+
+        @Override
+        public void onMtuChanged(BluetoothGatt gatt, int mtu, int status) {
+            Log.d("BluetoothFragment", "onMtuChanged");
+            operator.commandFinished();
         }
     };
 
@@ -236,9 +263,6 @@ public class BluetoothAntenna extends AndroidViewModel implements DeviceReceiver
             return;
         }
         services.postValue(gattClient.getServices());
-        try {
-            gattClient.requestMtu(512);
-        } catch (SecurityException ignored) {};
     }
 
     private void updateBluetoothConnection(int newState) {
@@ -246,7 +270,12 @@ public class BluetoothAntenna extends AndroidViewModel implements DeviceReceiver
         try {
             switch (newState) {
                 case BluetoothProfile.STATE_CONNECTED:
-                    gattClient.discoverServices();
+                    discoverServices();
+                    changeMTU();
+                    subscribeCharacteristic(powerServiceUUID, powerPublishedUUID);
+                    subscribeCharacteristic(wifiServiceUUID, wifiPublishedUUID);
+                    readCharacteristic(powerServiceUUID, powerPublishedUUID);
+                    readCharacteristic(wifiServiceUUID, wifiPublishedUUID);
                     break;
             }
         } catch (SecurityException ignored) {}
@@ -256,45 +285,67 @@ public class BluetoothAntenna extends AndroidViewModel implements DeviceReceiver
         services.postValue(new ArrayList<>());
     }
 
-    public void readCharacteristic(UUID serviceUUID, UUID characteristicUUID) {
-        BluetoothGattCharacteristic characteristic = findCharacteristic(serviceUUID, characteristicUUID);
-        if(characteristic == null) return;
+    public void discoverServices() {
+        operator.addCommand(() -> {
+            try {
+                this.gattClient.discoverServices();
+            } catch (SecurityException ignored) {}
+        });
+    }
 
-        Log.d("BluetoothFragment", "Dispatching read of characteristic " + characteristic.getUuid().toString());
-        try {
-            boolean initialized = gattClient.readCharacteristic(characteristic);
-            Log.d("BluetoothFragment", "Read request initialized: " + initialized);
-        } catch (SecurityException e) {
-            Log.e("BluetoothFragment", "Not allowed to read characteristic. Check app permissions.");
-        }
+    public void changeMTU() {
+        operator.addCommand(() -> {
+            Log.d("BluetoothFragment", "Requesting MTU change to 512");
+            try {
+                gattClient.requestMtu(512);
+            } catch (SecurityException ignored) {};
+        });
+    }
+
+    public void readCharacteristic(UUID serviceUUID, UUID characteristicUUID) {
+        operator.addCommand(() -> {
+            BluetoothGattCharacteristic characteristic = findCharacteristic(serviceUUID, characteristicUUID);
+            if(characteristic == null) return;
+            Log.d("BluetoothFragment", "Dispatching read of characteristic " + characteristic.getUuid().toString());
+            try {
+                boolean initialized = gattClient.readCharacteristic(characteristic);
+                Log.d("BluetoothFragment", "Read request initialized: " + initialized);
+            } catch (SecurityException e) {
+                Log.e("BluetoothFragment", "Not allowed to read characteristic. Check app permissions.");
+            }
+        });
     }
 
     public void subscribeCharacteristic(UUID serviceUUID, UUID characteristicUUID) {
-        BluetoothGattCharacteristic characteristic = findCharacteristic(serviceUUID, characteristicUUID);
-        if(characteristic == null) return;
+        operator.addCommand(() -> {
+            BluetoothGattCharacteristic characteristic = findCharacteristic(serviceUUID, characteristicUUID);
+            if(characteristic == null) return;
 
-        Log.d("BluetoothFragment", "Subscribing to characteristic " + characteristic.getUuid().toString());
-        try {
-            gattClient.setCharacteristicNotification(characteristic, true);
-            BluetoothGattDescriptor configDescriptor = characteristic.getDescriptor(configurationDescriptorUUID);
-            configDescriptor.setValue(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE);
-            gattClient.writeDescriptor(configDescriptor);
-        } catch (SecurityException e) {
-            Log.e("BluetoothFragment", "Not allowed to write characteristic. Check app permissions.");
-        }
+            Log.d("BluetoothFragment", "Subscribing to characteristic " + characteristic.getUuid().toString());
+            try {
+                gattClient.setCharacteristicNotification(characteristic, true);
+                BluetoothGattDescriptor configDescriptor = characteristic.getDescriptor(configurationDescriptorUUID);
+                configDescriptor.setValue(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE);
+                gattClient.writeDescriptor(configDescriptor);
+            } catch (SecurityException e) {
+                Log.e("BluetoothFragment", "Not allowed to write characteristic. Check app permissions.");
+            }
+        });
     }
 
     public void writeCharacteristic(UUID serviceUUID, UUID characteristicUUID, byte[] value) {
-        BluetoothGattCharacteristic characteristic = findCharacteristic(serviceUUID, characteristicUUID);
-        if(characteristic == null) return;
-        Log.d("BluetoothFragment", "Dispatching write of characteristic " + characteristic.getUuid().toString());
-        try {
-            characteristic.setValue(value);
-            characteristic.setWriteType(BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE);
-            gattClient.writeCharacteristic(characteristic);
-        } catch (SecurityException e) {
-            Log.e("BluetoothFragment", "Not allowed to read characteristic. Check app permissions.");
-        }
+        operator.addCommand(() -> {
+            BluetoothGattCharacteristic characteristic = findCharacteristic(serviceUUID, characteristicUUID);
+            if(characteristic == null) return;
+            Log.d("BluetoothFragment", "Dispatching write of characteristic " + characteristic.getUuid().toString());
+            try {
+                characteristic.setValue(value);
+                characteristic.setWriteType(BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE);
+                gattClient.writeCharacteristic(characteristic);
+            } catch (SecurityException e) {
+                Log.e("BluetoothFragment", "Not allowed to read characteristic. Check app permissions.");
+            }
+        });
     }
 
     private BluetoothGattCharacteristic findCharacteristic(UUID serviceUUID, UUID characteristicUUID) {
@@ -399,4 +450,6 @@ public class BluetoothAntenna extends AndroidViewModel implements DeviceReceiver
             return "Unknown";
         }
     }
+
+
 }
