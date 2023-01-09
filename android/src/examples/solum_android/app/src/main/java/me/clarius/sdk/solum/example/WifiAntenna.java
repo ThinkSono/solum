@@ -14,7 +14,7 @@ import androidx.annotation.NonNull;
 import androidx.lifecycle.AndroidViewModel;
 import androidx.lifecycle.MutableLiveData;
 
-public class Antenna extends AndroidViewModel {
+public class WifiAntenna extends AndroidViewModel {
     public final MutableLiveData<Network> network = new MutableLiveData<>(null);
     public final MutableLiveData<Boolean> tryingToConnect = new MutableLiveData<>(false);
     public final MutableLiveData<String> ssid = new MutableLiveData<>("");
@@ -22,7 +22,7 @@ public class Antenna extends AndroidViewModel {
 
     private ConnectivityManager.NetworkCallback networkCallback;
 
-    public Antenna(@NonNull Application application) {
+    public WifiAntenna(@NonNull Application application) {
         super(application);
     }
 
@@ -48,7 +48,7 @@ public class Antenna extends AndroidViewModel {
             @Override
             public void onAvailable(@NonNull Network network) {
                 super.onAvailable(network);
-                Antenna.this.network.postValue(network);
+                WifiAntenna.this.network.postValue(network);
                 connectivityManager.bindProcessToNetwork(network);
             }
 
@@ -56,7 +56,7 @@ public class Antenna extends AndroidViewModel {
             public void onUnavailable() {
                 super.onUnavailable();
                 Log.w("WifiFragment", "onUnavailable");
-                Antenna.this.network.postValue(null);
+                WifiAntenna.this.network.postValue(null);
             }
         };
         connectivityManager.requestNetwork(request, networkCallback);

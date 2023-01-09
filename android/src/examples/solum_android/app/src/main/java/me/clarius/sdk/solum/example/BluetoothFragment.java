@@ -1,84 +1,49 @@
 package me.clarius.sdk.solum.example;
 
-import android.Manifest;
-import android.annotation.SuppressLint;
-import android.bluetooth.BluetoothAdapter;
-import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothGatt;
-import android.bluetooth.BluetoothGattCallback;
 import android.bluetooth.BluetoothGattCharacteristic;
-import android.bluetooth.BluetoothGattDescriptor;
 import android.bluetooth.BluetoothGattService;
-import android.bluetooth.BluetoothManager;
 import android.bluetooth.BluetoothProfile;
-import android.bluetooth.le.BluetoothLeScanner;
-import android.bluetooth.le.ScanResult;
-import android.content.Context;
-import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
-import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
-import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
-import androidx.annotation.RequiresApi;
-import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 import me.clarius.sdk.solum.example.databinding.FragmentBluetoothBinding;
+import  me.clarius.sdk.solum.example.BluetoothAntenna.ScanStatus;
 
-
-interface DeviceReceiver {
-    void addDevice(ScanResult result);
-}
-
-
-public class BluetoothFragment extends Fragment implements DeviceReceiver {
-
-    enum ScanStatus {
-        STOPPED,
-        SCANNING,
-        ERROR,
-    }
-
+public class BluetoothFragment extends Fragment {
     private FragmentBluetoothBinding binding;
-    private boolean bluetoothPermissionsGranted = false;
-    private ArrayAdapter<BTDevice> deviceListAdapter;
-    private Map<String, BTDevice> deviceMap = new HashMap<>();
-    private BTDevice selectedDevice = null;
+    private ArrayAdapter<BluetoothAntenna.BTDevice> deviceListAdapter;
     private ProbeStore probeStore;
+    private BluetoothAntenna btAntenna;
 
     private final ActivityResultLauncher<String[]> bluetoothPermissionLauncher = registerForActivityResult(new ActivityResultContracts.RequestMultiplePermissions(), this::onBluetoothPermissionUpdate);
 
-    private void onBluetoothPermissionUpdate(Map<String, Boolean> results) {
-        bluetoothPermissionsGranted = true;
-        if (results != null) {
-            for (boolean value : results.values()) {
-                bluetoothPermissionsGranted &= value;
-            }
-        }
-        updateBluetoothPermissionsLabel();
+    public void onBluetoothPermissionUpdate(Map<String, Boolean> results) {
+        this.btAntenna.onBluetoothPermissionUpdate(results);
     }
 
-    private void updateBluetoothPermissionsLabel() {
+    private void updatePermissionsUI(Boolean permissionGranted) {
         String text = "";
-        if (bluetoothPermissionsGranted) {
+        if (permissionGranted) {
             text = "Granted";
         } else {
             text = "Not granted";
@@ -86,7 +51,7 @@ public class BluetoothFragment extends Fragment implements DeviceReceiver {
         binding.bluetoothPermissionsValue.setText(text);
     }
 
-    private void updateScanningUI() {
+    private void updateScanStatusUI(ScanStatus scanStatus) {
         String labelText = "";
         String buttonText = "";
         switch (scanStatus) {
@@ -97,14 +62,6 @@ public class BluetoothFragment extends Fragment implements DeviceReceiver {
         }
         binding.scanStatus.setText(labelText);
         binding.toggleScanBtn.setText(buttonText);
-    }
-
-    @RequiresApi(api = Build.VERSION_CODES.S)
-    private void requireBluetoothPermissions() {
-        if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED) {
-            onBluetoothPermissionUpdate(null);
-        }
-        bluetoothPermissionLauncher.launch(new String[]{Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT});
     }
 
     @Override
@@ -120,17 +77,19 @@ public class BluetoothFragment extends Fragment implements DeviceReceiver {
         super.onViewCreated(view, savedInstanceState);
 
         probeStore = new ViewModelProvider(requireActivity()).get(ProbeStore.class);
+        btAntenna = new ViewModelProvider(requireActivity()).get(BluetoothAntenna.class);
+        btAntenna.connectProbeStore(probeStore);
 
         binding.toggleScanBtn.setOnClickListener(v -> {
-            if (scanStatus == ScanStatus.SCANNING) {
-                stopScan();
+            if (btAntenna.scanStatus.getValue() == ScanStatus.SCANNING) {
+                btAntenna.stopScan();
             } else {
-                startScan();
+                btAntenna.startScan();
             }
         });
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            binding.requestPermissionsBtn.setOnClickListener(v -> requireBluetoothPermissions());
+            binding.requestPermissionsBtn.setOnClickListener(v -> btAntenna.requestBluetoothPermissions(bluetoothPermissionLauncher));
         }
 
         deviceListAdapter = new ArrayAdapter<>(requireContext(), android.R.layout.simple_spinner_item);
@@ -140,7 +99,7 @@ public class BluetoothFragment extends Fragment implements DeviceReceiver {
                 new AdapterView.OnItemSelectedListener() {
                     @Override
                     public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                        selectedDevice = deviceListAdapter.getItem(position);
+                       // TODO: Clear all UI elements, update with selected probe / device
                     }
 
                     @Override
@@ -150,118 +109,57 @@ public class BluetoothFragment extends Fragment implements DeviceReceiver {
         );
 
         binding.showUnnamedDevices.setOnCheckedChangeListener((v, checked) -> {
-            updateDeviceList(checked);
+            updateDeviceList(btAntenna.devices.getValue(), checked);
         });
 
         binding.connectBtn.setOnClickListener(v -> {
-            if (connectionState == BluetoothProfile.STATE_CONNECTED) {
-                disconnect();
+            int state;
+            try {
+                state = btAntenna.connectionState.getValue();
+            } catch (NullPointerException e) {
+                state = BluetoothProfile.STATE_DISCONNECTED;
+            }
+
+            if (state == BluetoothProfile.STATE_CONNECTED) {
+                btAntenna.disconnect();
             } else {
-                connect();
+                String selectedAddress = deviceListAdapter.getItem(binding.deviceList.getSelectedItemPosition()).address;
+                btAntenna.connect(selectedAddress);
             }
         });
 
         binding.readPowerBtn.setOnClickListener(v -> {
-            readCharacteristic(powerServiceUUID, powerPublishedUUID);
+            btAntenna.readCharacteristic(BluetoothAntenna.powerServiceUUID, BluetoothAntenna.powerPublishedUUID);
         });
 
         binding.setPowerBtn.setOnClickListener(v -> {
+            Probe probe = btAntenna.getCurrentProbe();
             byte[] payload;
-            if (probePowered) {
+            if (probe.powered) {
                 payload = new byte[] {0};
             } else {
                 payload = new byte[] {1};
             }
-            writeCharacteristic(powerServiceUUID, powerRequestUUID, payload);
+            btAntenna.writeCharacteristic(BluetoothAntenna.powerServiceUUID, BluetoothAntenna.powerRequestUUID, payload);
         });
 
         binding.wifiBtn.setOnClickListener(v -> {
-            readCharacteristic(wifiServiceUUID, wifiPublishedUUID);
+            btAntenna.readCharacteristic(BluetoothAntenna.wifiServiceUUID, BluetoothAntenna.wifiPublishedUUID);
         });
 
-        updateConnectionUI();
-        updateBluetoothPermissionsLabel();
-        setupBluetooth();
-    }
+        btAntenna.permissionsGranted.observe(getViewLifecycleOwner(), this::updatePermissionsUI);
+        btAntenna.scanStatus.observe(getViewLifecycleOwner(), this::updateScanStatusUI);
+        btAntenna.services.observe(getViewLifecycleOwner(), this::updateServicesUI);
+        btAntenna.devices.observe(getViewLifecycleOwner(), devices -> updateDeviceList(devices, binding.showUnnamedDevices.isChecked()));
+        btAntenna.connectionState.observe(getViewLifecycleOwner(), this::updateConnectionUI);
+        probeStore.probeUpdated.observe(getViewLifecycleOwner(), probe -> {
+            updateProbePower(probe.powered);
+            updateWifi(probe.wifiInfo);
+        });
 
-    private BluetoothManager btManager;
-    private BluetoothAdapter btAdapter;
-    private BluetoothLeScanner leScanner;
-    private BluetoothGatt gattClient;
-    private List<BluetoothGattService> services;
-    ScanStatus scanStatus = ScanStatus.STOPPED;
-    ScanCallback currentScan = null;
-    boolean probePowered = false;
-
-    static final UUID powerServiceUUID = UUID.fromString("8C853B6A-2297-44C1-8277-73627C8D2ABC");
-    static final UUID powerPublishedUUID = UUID.fromString("8C853B6A-2297-44C1-8277-73627C8D2ABD");
-    static final UUID powerRequestUUID = UUID.fromString("8C853B6A-2297-44C1-8277-73627C8D2ABE");
-    static final UUID wifiServiceUUID = UUID.fromString("F9EB3FAE-947A-4E5B-AB7C-C799E91ED780");
-    static final UUID wifiPublishedUUID = UUID.fromString("F9EB3FAE-947A-4E5B-AB7C-C799E91ED781");
-    static final UUID wifiRequestUUID = UUID.fromString("F9EB3FAE-947A-4E5B-AB7C-C799E91ED782");
-    static final UUID configurationDescriptorUUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb");
-
-    private Map<UUID, BluetoothGattCharacteristic> characteristics = new HashMap<>();
-
-    private void setupBluetooth() {
-        btManager = (BluetoothManager) requireContext().getSystemService(Context.BLUETOOTH_SERVICE);
-        if (btManager == null) {
-            Log.e("BluetoothFragment", "BluetoothManager is null");
-            return;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            btAntenna.requestBluetoothPermissions(bluetoothPermissionLauncher);
         }
-        btAdapter = btManager.getAdapter();
-        if (btAdapter == null) {
-            Log.e("BluetoothFragment", "BluetoothAdapter is null");
-            return;
-        }
-        leScanner = btAdapter.getBluetoothLeScanner();
-        if (leScanner == null) {
-            Log.e("BluetoothFragment", "BluetoothLeScanner is null");
-            return;
-        }
-    }
-
-    class ScanCallback extends android.bluetooth.le.ScanCallback {
-        private final DeviceReceiver receiver;
-
-        public ScanCallback(DeviceReceiver receiver) {
-            this.receiver = receiver;
-        }
-
-        @Override
-        public void onScanResult(int callbackType, ScanResult result) {
-            super.onScanResult(callbackType, result);
-            Log.d("BluetoothFragment", "New BLE device: " + result.getDevice().getAddress());
-            receiver.addDevice(result);
-        }
-    }
-
-    private void startScan() {
-        try {
-            deviceMap.clear();
-            deviceListAdapter.clear();
-            currentScan = new ScanCallback(this);
-            leScanner.startScan(currentScan);
-            scanStatus = ScanStatus.SCANNING;
-        } catch (SecurityException x) {
-            Log.e("BluetoothFragment", "Missing required permissions for scan");
-            scanStatus = ScanStatus.ERROR;
-        }
-        updateScanningUI();
-    }
-
-    private void stopScan() {
-        try {
-            if (currentScan != null) {
-                leScanner.stopScan(currentScan);
-                currentScan = null;
-            }
-            scanStatus = ScanStatus.STOPPED;
-        } catch (SecurityException x) {
-            Log.e("BluetoothFragment", "Missing required permissions for scan");
-            scanStatus = ScanStatus.ERROR;
-        }
-        updateScanningUI();
     }
 
     @Override
@@ -270,158 +168,16 @@ public class BluetoothFragment extends Fragment implements DeviceReceiver {
         binding = null;
     }
 
-    class BTDevice {
-        public String address = null;
-        public String name = null;
-        public String alias = null;
-        public BluetoothDevice device = null;
-
-        public boolean isUnnamed() {
-            return name == null && alias == null;
-        }
-
-        @NonNull
-        public String toString() {
-            if (name != null) {
-                return name;
-            } else if (alias != null) {
-                return alias;
-            } else if (address != null) {
-                return address;
-            }
-            return "Unknown";
-        }
-    }
-
-    @Override
-    public void addDevice(ScanResult result) {
-        BTDevice device = new BTDevice();
-        device.device = result.getDevice();
-        device.address = result.getDevice().getAddress();
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                device.alias = result.getDevice().getAlias();
-                device.name = result.getDevice().getName();
-            }
-        } catch (SecurityException ignored) {}
-
-        if (deviceMap.putIfAbsent(device.address, device) == null) {
-            updateDeviceList(binding.showUnnamedDevices.isChecked());
-        }
-
-        if (device.name != null && device.name.matches("^CUS-.*$")) {
-            if (!probeStore.probeMap.containsKey(device.name)) {
-                Probe probe = new Probe();
-                probe.bluetoothAddr = device.address;
-                probe.name = device.name;
-                probeStore.probeMap.put(probe.name, probe);
-            }
-        }
-    }
-
-    private void updateDeviceList(boolean showUnnamedDevices) {
+    private void updateDeviceList(Collection<BluetoothAntenna.BTDevice> devices, boolean showUnnamedDevices) {
         deviceListAdapter.clear();
-        for (BTDevice device : deviceMap.values()) {
+        for (BluetoothAntenna.BTDevice device : devices) {
             if (!device.isUnnamed() || showUnnamedDevices) {
                 deviceListAdapter.add(device);
             }
         }
     }
 
-
-    private final BluetoothGattCallback gattCallback = new BluetoothGattCallback() {
-        @Override
-        public void onConnectionStateChange(BluetoothGatt gatt, int status, int newState) {
-            binding.getRoot().post(() -> {
-                try {
-                    updateBluetoothConnection(newState);
-                } catch (Exception ignored) {}
-            });
-        }
-
-        @Override
-        public void onServicesDiscovered(BluetoothGatt gatt, int status) {
-            if (status == BluetoothGatt.GATT_SUCCESS) {
-                binding.getRoot().post(() -> updateServices());
-            } else {
-                Log.w("BluetoothFragment", "onServicesDiscovered received: " + status);
-            }
-        }
-
-        @Override
-        public void onCharacteristicRead(@NonNull BluetoothGatt gatt, @NonNull BluetoothGattCharacteristic characteristic, int status) {
-            byte[] value = characteristic.getValue();
-            if (status == BluetoothGatt.GATT_SUCCESS) {
-                if (characteristic.getUuid().equals(powerPublishedUUID)) {
-                    Log.d("BluetoothFragment", "updateProbePower");
-                    binding.getRoot().post(() -> updateProbePower(value));
-                } else if (characteristic.getUuid().equals(wifiPublishedUUID)) {
-                    binding.getRoot().post(() -> updateWifi(value));
-                }
-            }
-        }
-
-        @Override
-        public void onCharacteristicChanged(@NonNull BluetoothGatt gatt, @NonNull BluetoothGattCharacteristic characteristic) {
-            byte[] value = characteristic.getValue();
-            if(value != null) {
-                binding.getRoot().post(() -> updateProbePower(value));
-            }
-        }
-    };
-
-    private int connectionState = BluetoothProfile.STATE_DISCONNECTED;
-
-    private void connect() {
-        if (selectedDevice == null) {
-            return;
-        }
-        try {
-            gattClient = selectedDevice.device.connectGatt(requireContext(), true, gattCallback);
-        } catch (SecurityException ignored) {}
-    }
-
-    private void disconnect() {
-        if (gattClient != null) {
-            try {
-                gattClient.disconnect();
-            } catch (SecurityException ignored) {}
-            gattClient = null;
-            services = null;
-            clearServices();
-        }
-    }
-
-    private void updateServices() {
-        if (gattClient == null) {
-            return;
-        }
-        services = gattClient.getServices();
-        clearServices();
-        for (BluetoothGattService service: services) {
-            displayServiceInfo(service);
-            for (BluetoothGattCharacteristic c : service.getCharacteristics()) {
-                characteristics.put(c.getUuid(), c);
-            }
-        }
-        try {
-            gattClient.requestMtu(512);
-        } catch (SecurityException ignored) {};
-    }
-
-    public void updateBluetoothConnection(int newState) {
-        connectionState = newState;
-        updateConnectionUI();
-        try {
-            switch (connectionState) {
-                case BluetoothProfile.STATE_CONNECTED:
-                    gattClient.discoverServices();
-                    break;
-            }
-        } catch (SecurityException ignored) {}
-    }
-
-    private void updateConnectionUI() {
+    private void updateConnectionUI(int connectionState) {
         String connectionStatus = "N/A";
         String buttonText = "Connect";
         switch(connectionState) {
@@ -437,12 +193,13 @@ public class BluetoothFragment extends Fragment implements DeviceReceiver {
     @Override
     public void onPause() {
         super.onPause();
-        disconnect();
+        btAntenna.disconnect();
     }
 
-    private void clearServices() {
-        binding.services.removeAllViews();
-        characteristics.clear();
+    private void updateServicesUI(List<BluetoothGattService> services) {
+        for (BluetoothGattService service : services) {
+            displayServiceInfo(service);
+        }
     }
 
     private void displayServiceInfo(BluetoothGattService service) {
@@ -468,106 +225,31 @@ public class BluetoothFragment extends Fragment implements DeviceReceiver {
         }
     }
 
-    private void readCharacteristic(UUID serviceUUID, UUID characteristicUUID) {
-        BluetoothGattCharacteristic characteristic = findCharacteristic(serviceUUID, characteristicUUID);
-        if(characteristic == null) return;
-
-        Log.d("BluetoothFragment", "Dispatching read of characteristic " + characteristic.getUuid().toString());
-        try {
-            boolean initialized = gattClient.readCharacteristic(characteristic);
-            Log.d("BluetoothFragment", "Read request initialized: " + initialized);
-        } catch (SecurityException e) {
-            Log.e("BluetoothFragment", "Not allowed to read characteristic. Check app permissions.");
-        }
-    }
-
-    public void subscribeCharacteristic(UUID serviceUUID, UUID characteristicUUID) {
-        BluetoothGattCharacteristic characteristic = findCharacteristic(serviceUUID, characteristicUUID);
-        if(characteristic == null) return;
-
-        Log.d("BluetoothFragment", "Subscribing to characteristic " + characteristic.getUuid().toString());
-        try {
-             gattClient.setCharacteristicNotification(characteristic, true);
-             BluetoothGattDescriptor configDescriptor = characteristic.getDescriptor(configurationDescriptorUUID);
-             configDescriptor.setValue(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE);
-             gattClient.writeDescriptor(configDescriptor);
-        } catch (SecurityException e) {
-            Log.e("BluetoothFragment", "Not allowed to write characteristic. Check app permissions.");
-        }
-    }
-
-    private void writeCharacteristic(UUID serviceUUID, UUID characteristicUUID, byte[] value) {
-        BluetoothGattCharacteristic characteristic = findCharacteristic(serviceUUID, characteristicUUID);
-        if(characteristic == null) return;
-        Log.d("BluetoothFragment", "Dispatching write of characteristic " + characteristic.getUuid().toString());
-        try {
-            characteristic.setValue(value);
-            characteristic.setWriteType(BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE);
-            gattClient.writeCharacteristic(characteristic);
-        } catch (SecurityException e) {
-            Log.e("BluetoothFragment", "Not allowed to read characteristic. Check app permissions.");
-        }
-    }
-
-    private BluetoothGattCharacteristic findCharacteristic(UUID serviceUUID, UUID characteristicUUID) {
-        if (gattClient == null) {
-            Log.e("BluetoothFragment", "Bluetooth not connected");
-            return null;
-        }
-        BluetoothGattService service = gattClient.getService(serviceUUID);
-        if (service == null) {
-            Log.e("BluetoothFragment", "Could not find service " + serviceUUID.toString());
-            return null;
-        }
-        BluetoothGattCharacteristic characteristic = service.getCharacteristic(characteristicUUID);
-        if (characteristic == null) {
-            Log.e("BluetoothFragment", "Could not find characteristic " + characteristicUUID.toString());
-            return null;
-        }
-        return characteristic;
-    }
-
-    public void updateProbePower(byte[] power) {
-        probePowered = false;
-        for (byte b : power) {
-            if (b > 0) {
-                probePowered = true;
-            }
-        }
-        binding.powerStatus.setText(payloadToHex(power));
-        if (probePowered) {
+    public void updateProbePower(boolean powered) {
+        if (powered) {
+            binding.powerStatus.setText("On");
             binding.setPowerBtn.setText("Power off");
         } else {
+            binding.powerStatus.setText("Off");
             binding.setPowerBtn.setText("Power on");
         }
     }
 
-    public void updateWifi(byte[] wifiInfo) {
-        if (wifiInfo == null) return;
-        Log.d("BluetoothFragment", "updateWifi called with length " + wifiInfo.length);
-        String payload = new String(wifiInfo, StandardCharsets.US_ASCII);
-        String text = payload.replace('\n', ',');
-        binding.wifiInfo.setText(text);
+    public void updateWifi(WifiInfo wifiInfo) {
+        if (wifiInfo == null) {
+            binding.wifiInfo.setText("N/A");
+            return;
+        }
+        // linter says we can replace this with string. Is this some advanced compiler magic?
+        // I would think that all the string additions would lead to creation of new strings at every operation.
+        StringBuilder builder = new StringBuilder();
+        builder.append("state: ").append(wifiInfo.state);
+        builder.append("\nssid: ").append(wifiInfo.ssid);
+        builder.append("\npassphrase: ").append(wifiInfo.passphrase);
+        builder.append("\nipAddr: ").append(wifiInfo.ipAddr);
+        builder.append("\ncontrolPort: ").append(wifiInfo.controlPort);
+        builder.append("\ncastPort: ").append(wifiInfo.castPort);
 
-        BTDevice device =  deviceMap.get(gattClient.getDevice().getAddress());
-        Probe probe = null;
-        if (device != null && device.name != null) {
-            probe = probeStore.probeMap.get(device.name);
-        }
-        if (probe != null) {
-            probe.wifiInfo = WifiInfo.fromPayload(payload);
-            Log.d("BluetoothFragment", "Update wifi info for probe " + probe);
-        }
-    }
-
-    static String payloadToHex(byte[] payload) {
-        if (payload == null) {
-            return "null";
-        }
-        String hex = "0x";
-        for (byte b : payload) {
-            hex += Byte.toString(b);
-        }
-        return hex;
+        binding.wifiInfo.setText(builder.toString());
     }
 }

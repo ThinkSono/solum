@@ -6,6 +6,7 @@ public class Probe {
     public String name;
     public String bluetoothAddr;
     public WifiInfo wifiInfo;
+    public boolean powered;
 
     @NonNull
     @Override

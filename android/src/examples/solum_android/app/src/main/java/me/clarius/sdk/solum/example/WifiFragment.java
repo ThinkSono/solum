@@ -2,8 +2,6 @@ package me.clarius.sdk.solum.example;
 
 import android.Manifest;
 import android.content.pm.PackageManager;
-import android.net.ConnectivityManager;
-import android.net.Network;
 import android.os.Build;
 import android.os.Bundle;
 
@@ -30,7 +28,7 @@ import me.clarius.sdk.solum.example.databinding.FragmentWifiBinding;
 public class WifiFragment extends Fragment {
 
     private FragmentWifiBinding binding;
-    private Antenna antenna;
+    private WifiAntenna antenna;
     private ProbeStore probeStore;
     private boolean connectButtonEnabled = true;
     private ArrayAdapter<Probe> probeListAdapter;
@@ -76,7 +74,7 @@ public class WifiFragment extends Fragment {
     @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
-        antenna = new ViewModelProvider(requireActivity()).get(Antenna.class);
+        antenna = new ViewModelProvider(requireActivity()).get(WifiAntenna.class);
         probeStore = new ViewModelProvider(requireActivity()).get(ProbeStore.class);
         binding = FragmentWifiBinding.bind(view);
 
