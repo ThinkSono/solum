@@ -7,9 +7,9 @@
 
     <fragment
         android:id="@+id/FirstFragment"
-        android:name="me.clarius.sdk.solum.example.FirstFragment"
+        android:name="me.clarius.sdk.solum.example.SolumFragment"
         android:label="@string/first_fragment_label"
-        tools:layout="@layout/fragment_first"/>
+        tools:layout="@layout/fragment_solum"/>
     <fragment
         android:id="@+id/BluetoothFragment"
         android:name="me.clarius.sdk.solum.example.BluetoothFragment"
@@ -40,7 +40,7 @@
     </fragment>
     <fragment
         android:id="@+id/probeFragment"
-        android:name="me.clarius.sdk.solum.example.ProbeFragment"
+        android:name="me.clarius.sdk.solum.example.AutoConnectionFragment"
         android:label="Auto Connection"
-        tools:layout="@layout/fragment_probe" />
+        tools:layout="@layout/fragment_auto_connection" />
 </navigation>

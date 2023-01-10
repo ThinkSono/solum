@@ -17,14 +17,10 @@ import androidx.annotation.NonNull;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.MutableLiveData;
 import androidx.lifecycle.ViewModelProvider;
-import androidx.navigation.fragment.NavHostFragment;
 
 import java.nio.ByteBuffer;
-import java.util.Optional;
-import java.util.StringJoiner;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.function.Consumer;
 
 import me.clarius.sdk.Button;
 import me.clarius.sdk.Connection;
@@ -32,26 +28,20 @@ import me.clarius.sdk.ImagingState;
 import me.clarius.sdk.Mode;
 import me.clarius.sdk.Param;
 import me.clarius.sdk.Platform;
-import me.clarius.sdk.PointF;
 import me.clarius.sdk.PosInfo;
 import me.clarius.sdk.PowerDown;
-import me.clarius.sdk.ProbeInfo;
 import me.clarius.sdk.ProbeSettings;
 import me.clarius.sdk.ProcessedImageInfo;
-import me.clarius.sdk.Range;
 import me.clarius.sdk.RawImageInfo;
 import me.clarius.sdk.Solum;
 import me.clarius.sdk.SpectralImageInfo;
-import me.clarius.sdk.StatusInfo;
-import me.clarius.sdk.SwUpdate;
-import me.clarius.sdk.Tgc;
-import me.clarius.sdk.solum.example.databinding.FragmentFirstBinding;
+import me.clarius.sdk.solum.example.databinding.FragmentSolumBinding;
 
-public class FirstFragment extends Fragment {
+public class SolumFragment extends Fragment {
 
     private static final String TAG = "Solum";
     private final ExecutorService executorService = Executors.newFixedThreadPool(1);
-    private FragmentFirstBinding binding;
+    private FragmentSolumBinding binding;
     private Solum solum;
     private boolean isRunning = false;
     private boolean isBuffering = false;
@@ -118,7 +108,7 @@ public class FirstFragment extends Fragment {
             @NonNull LayoutInflater inflater, ViewGroup container,
             Bundle savedInstanceState
     ) {
-        binding = FragmentFirstBinding.inflate(inflater, container, false);
+        binding = FragmentSolumBinding.inflate(inflater, container, false);
         return binding.getRoot();
     }
 
