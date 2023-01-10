@@ -38,7 +38,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:id="@+id/connect_to_probe"
-            android:text="Next step"/>
+            android:text="Connect"/>
     </LinearLayout>
 
     <LinearLayout

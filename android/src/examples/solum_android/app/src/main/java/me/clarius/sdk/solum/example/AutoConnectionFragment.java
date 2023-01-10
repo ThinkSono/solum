@@ -1,6 +1,7 @@
 package me.clarius.sdk.solum.example;
 
 import android.bluetooth.BluetoothProfile;
+import android.content.Context;
 import android.os.Build;
 import android.os.Bundle;
 
@@ -11,6 +12,7 @@ import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -18,9 +20,20 @@ import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Spinner;
 
+import java.nio.ByteBuffer;
 import java.util.Map;
 
+import me.clarius.sdk.Button;
+import me.clarius.sdk.Connection;
+import me.clarius.sdk.ImagingState;
+import me.clarius.sdk.Platform;
+import me.clarius.sdk.PosInfo;
+import me.clarius.sdk.PowerDown;
+import me.clarius.sdk.ProbeSettings;
+import me.clarius.sdk.ProcessedImageInfo;
+import me.clarius.sdk.RawImageInfo;
 import me.clarius.sdk.Solum;
+import me.clarius.sdk.SpectralImageInfo;
 import me.clarius.sdk.solum.example.databinding.FragmentAutoConnectionBinding;
 
 public class AutoConnectionFragment extends Fragment {
@@ -31,7 +44,88 @@ public class AutoConnectionFragment extends Fragment {
 
     private FragmentAutoConnectionBinding binding;
     private ArrayAdapter<Probe> probeAdapter;
-//    private Solum solum;
+    private Solum solum;
+
+    public static final String TAG = "AutoConnectionFragment";
+
+    private final Solum.Listener solumListener = new Solum.Listener() {
+        @Override
+        public void error(String msg) {
+            showError(msg);
+        }
+
+        @Override
+        public void connectionResult(Connection result, int port, String status) {
+            Log.d(TAG, "Connection result: " + result + ", port: " + port + ", status: " + status);
+            if (result == Connection.ProbeConnected) {
+                AutoConnectionFragment.this.solumnConnected = true;
+                showMessage("Connected");
+            } else if (result == Connection.SwUpdateRequired) {
+                AutoConnectionFragment.this.solumnConnected = true;
+                showMessage("Firmware update needed");
+            } else {
+                AutoConnectionFragment.this.solumnConnected = false;
+                showMessage("Disconnected");
+            }
+            binding.getRoot().post(() -> nextStep());
+        }
+
+        @Override
+        public void certInfo(int daysValid) {
+            updateCertificateStatus(daysValid);
+            showMessage("Days valid for cert: " + daysValid);
+        }
+
+        @Override
+        public void imaging(ImagingState state, boolean imaging) {
+            showMessage("Imaging state: " + state + " imaging? " + imaging);
+            AutoConnectionFragment.this.imaging = imaging;
+        }
+
+        @Override
+        public void newProcessedImage(ByteBuffer buffer, ProcessedImageInfo info, PosInfo[] pos) {
+            showMessage("new image");
+        }
+
+        @Override
+        public void newRawImageFn(ByteBuffer buffer, RawImageInfo info, PosInfo[] pos) {
+        }
+
+        @Override
+        public void newSpectralImageFn(ByteBuffer buffer, SpectralImageInfo info) {
+        }
+
+        @Override
+        public void poweringDown(PowerDown reason, int seconds) {
+            Log.d(TAG, "Powering down in " + seconds + " seconds (reason: " + reason + ")");
+        }
+
+        @Override
+        public void buttonPressed(Button button, int count) {
+            Log.d(TAG, "Button '" + button + "' pressed, count: " + count);
+        }
+    };
+
+    private String getCertDir() {
+        return requireContext().getDir("cert", Context.MODE_PRIVATE).toString();
+    }
+
+    private String getCertificate() {
+        return "certificate"; // get certificate from https://cloud.clarius.com/api/public/v0/devices/oem/
+    }
+
+    private void updateCertificateStatus(int daysValid) {
+        binding.getRoot().post(() -> {
+            String text = "N/A";
+            if (daysValid >= 0) {
+                text = "Valid for " + daysValid + " days";
+            } else {
+                text = "Invalid";
+            }
+            binding.certificateValid.setText(text);
+            nextStep();
+        });
+    }
 
     private final ActivityResultLauncher<String[]> bluetoothPermissionLauncher = registerForActivityResult(new ActivityResultContracts.RequestMultiplePermissions(), this::onBluetoothPermissionUpdate);
 
@@ -56,6 +150,20 @@ public class AutoConnectionFragment extends Fragment {
         btAntenna = provider.get(BluetoothAntenna.class);
         wifiAntenna = provider.get(WifiAntenna.class);
         btAntenna.connectProbeStore(probeStore);
+
+        solum = new Solum(requireContext(), solumListener);
+        solum.initialize(getCertDir(), new Solum.InitializationResult() {
+            @Override
+            public void accept(boolean connected) {
+                Log.d(TAG, "Initialization result: " + connected);
+                if (connected) {
+                    solum.setCertificate(getCertificate());
+                    solum.getFirmwareVersion(Platform.HD,
+                            maybeVersion -> showMessage("Retrieved FW version: " + maybeVersion.orElse("???")));
+                }
+            }
+        });
+        solum.setProbeSettings(new ProbeSettings());
 
         probeAdapter = new ArrayAdapter<>(requireContext(), android.R.layout.simple_spinner_item);
         probeAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
@@ -152,6 +260,15 @@ public class AutoConnectionFragment extends Fragment {
                 wifiAntenna.passphrase.setValue(selectedProbe.wifiInfo.passphrase);
                 wifiAntenna.connectWifi();
             } break;
+            case CONNECT_SOLUM: {
+                solum.connect(selectedProbe.wifiInfo.ipAddr, selectedProbe.wifiInfo.controlPort);
+            } break;
+            case CHECK_CERTIFICATE: break;
+            case LOAD_APPLICATION: {
+                solum.loadApplication("L7HD", "vascular");
+                applicationLoaded = true;
+                nextStep();
+            } break;
         }
     }
 
@@ -198,6 +315,42 @@ public class AutoConnectionFragment extends Fragment {
                     return Step.CONNECT_SOLUM;
                 }
             } break;
+            case CONNECT_SOLUM: {
+                if (!wifiConnected) {
+                    return Step.CONNECT_WIFI;
+                }
+                if (solumnConnected) {
+                    return Step.CHECK_CERTIFICATE;
+                }
+            } break;
+            case CHECK_CERTIFICATE:
+                if (!solumnConnected) {
+                    return Step.CONNECT_SOLUM;
+                }
+                if (certificateValid) {
+                    return Step.LOAD_APPLICATION;
+                }
+            case LOAD_APPLICATION: {
+                if (!solumnConnected) {
+                    return Step.CONNECT_SOLUM;
+                }
+                if (applicationLoaded) {
+                    return Step.IMAGING_READY;
+                }
+            } break;
+            case IMAGING_READY: {
+                if (!solumnConnected) {
+                    return Step.CONNECT_SOLUM;
+                }
+                if (imaging) {
+                    return Step.IMAGING;
+                }
+            } break;
+            case IMAGING: {
+                if (!imaging) {
+                    return Step.IMAGING_READY;
+                }
+            }
         }
 
         return currentStep;
@@ -252,6 +405,7 @@ public class AutoConnectionFragment extends Fragment {
         WAIT_WIFI,
         CONNECT_WIFI,
         CONNECT_SOLUM,
+        CHECK_CERTIFICATE,
         LOAD_APPLICATION,
         IMAGING_READY,
         IMAGING,
@@ -264,6 +418,15 @@ public class AutoConnectionFragment extends Fragment {
     private boolean wifiEnabled = false;
     private boolean wifiConnected = false;
     private boolean solumnConnected = false;
+    private boolean certificateValid = false;
     private boolean applicationLoaded = false;
     private boolean imaging = false;
+
+    private void showMessage(String msg) {
+        Log.d(TAG, msg);
+    }
+
+    private void showError(String err) {
+        Log.e(TAG, err);
+    }
 }
