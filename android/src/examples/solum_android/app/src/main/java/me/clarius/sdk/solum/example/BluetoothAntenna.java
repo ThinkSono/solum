@@ -149,6 +149,8 @@ public class BluetoothAntenna extends AndroidViewModel implements DeviceReceiver
     }
 
     public void connect(String deviceAddress) {
+        disconnect();
+
         BTDevice selectedDevice = deviceMap.get(deviceAddress);
         if (selectedDevice == null) {
             return;
@@ -189,6 +191,7 @@ public class BluetoothAntenna extends AndroidViewModel implements DeviceReceiver
                 probe.bluetoothAddr = device.address;
                 probe.name = device.name;
                 probeStore.probeMap.put(probe.name, probe);
+                probeStore.probeUpdated.postValue(probe);
             }
         }
 

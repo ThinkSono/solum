@@ -1,5 +1,7 @@
 package me.clarius.sdk.solum.example;
 
+import androidx.annotation.NonNull;
+
 public class WifiInfo {
     public String state;
     public String ipAddr;
@@ -7,6 +9,18 @@ public class WifiInfo {
     public String passphrase;
     public int controlPort;
     public int castPort;
+
+    @NonNull
+    public String toString() {
+        StringBuilder builder = new StringBuilder();
+        builder.append("state: ").append(this.state);
+        builder.append("\nssid: ").append(this.ssid);
+        builder.append("\npassphrase: ").append(this.passphrase);
+        builder.append("\nipAddr: ").append(this.ipAddr);
+        builder.append("\ncontrolPort: ").append(this.controlPort);
+        builder.append("\ncastPort: ").append(this.castPort);
+        return builder.toString();
+    }
 
     public static WifiInfo fromPayload(String payload) {
         String[] tokens = payload.split("\n");
