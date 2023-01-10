@@ -149,6 +149,7 @@ public class BluetoothAntenna extends AndroidViewModel implements DeviceReceiver
     }
 
     public void connect(String deviceAddress) {
+        stopScan();
         disconnect();
 
         BTDevice selectedDevice = deviceMap.get(deviceAddress);

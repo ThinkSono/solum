@@ -2,6 +2,7 @@ package me.clarius.sdk.solum.example;
 
 import android.bluetooth.BluetoothProfile;
 import android.content.Context;
+import android.graphics.Bitmap;
 import android.os.Build;
 import android.os.Bundle;
 
@@ -10,6 +11,7 @@ import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
+import androidx.lifecycle.MutableLiveData;
 import androidx.lifecycle.ViewModelProvider;
 
 import android.util.Log;
@@ -22,6 +24,8 @@ import android.widget.Spinner;
 
 import java.nio.ByteBuffer;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import me.clarius.sdk.Button;
 import me.clarius.sdk.Connection;
@@ -44,7 +48,11 @@ public class AutoConnectionFragment extends Fragment {
 
     private FragmentAutoConnectionBinding binding;
     private ArrayAdapter<Probe> probeAdapter;
+
     private Solum solum;
+    private ImageConverter imageConverter;
+    private final ExecutorService executorService = Executors.newFixedThreadPool(1);
+    public final MutableLiveData<Bitmap> processedImage = new MutableLiveData<>();
 
     public static final String TAG = "AutoConnectionFragment";
 
@@ -67,7 +75,7 @@ public class AutoConnectionFragment extends Fragment {
                 AutoConnectionFragment.this.solumnConnected = false;
                 showMessage("Disconnected");
             }
-            binding.getRoot().post(() -> nextStep());
+            binding.getRoot().post(() ->  { nextStep(); updateChecklist(); });
         }
 
         @Override
@@ -79,12 +87,12 @@ public class AutoConnectionFragment extends Fragment {
         @Override
         public void imaging(ImagingState state, boolean imaging) {
             showMessage("Imaging state: " + state + " imaging? " + imaging);
-            AutoConnectionFragment.this.imaging = imaging;
         }
 
         @Override
         public void newProcessedImage(ByteBuffer buffer, ProcessedImageInfo info, PosInfo[] pos) {
             showMessage("new image");
+            imageConverter.convertImage(buffer, info);
         }
 
         @Override
@@ -117,13 +125,15 @@ public class AutoConnectionFragment extends Fragment {
     private void updateCertificateStatus(int daysValid) {
         binding.getRoot().post(() -> {
             String text = "N/A";
-            if (daysValid >= 0) {
+            certificateValid = daysValid >= 0;
+            if (certificateValid) {
                 text = "Valid for " + daysValid + " days";
             } else {
                 text = "Invalid";
             }
             binding.certificateValid.setText(text);
             nextStep();
+            updateChecklist();
         });
     }
 
@@ -163,7 +173,10 @@ public class AutoConnectionFragment extends Fragment {
                 }
             }
         });
-        solum.setProbeSettings(new ProbeSettings());
+        ProbeSettings probeSettings = new ProbeSettings();
+        solum.setProbeSettings(probeSettings);
+        imageConverter = new ImageConverter(executorService, new ImageCallback(processedImage));
+        processedImage.observe(getViewLifecycleOwner(), binding.imageView::setImageBitmap);
 
         probeAdapter = new ArrayAdapter<>(requireContext(), android.R.layout.simple_spinner_item);
         probeAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
@@ -203,8 +216,18 @@ public class AutoConnectionFragment extends Fragment {
         });
 
         binding.connectToProbe.setOnClickListener(v -> {
-            nextStep();
-            updateChecklist();
+            if (currentStep == Step.SELECT_PROBE) {
+                shouldConnect = true;
+                nextStep();
+                updateChecklist();
+            } else {
+                reset();
+                solum.powerDown();
+                solum.disconnect();
+                wifiAntenna.disconnectWifi();
+                btAntenna.disconnect();
+                updateChecklist();
+            }
         });
 
         binding.searchProbes.setOnClickListener(v -> {
@@ -223,6 +246,12 @@ public class AutoConnectionFragment extends Fragment {
             } else {
                 binding.searchProbes.setText("Search probes");
             }
+        });
+
+        binding.toggleImaging.setOnClickListener(v -> {
+            imaging = !imaging;
+            solum.run(imaging);
+            updateChecklist();
         });
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -276,7 +305,7 @@ public class AutoConnectionFragment extends Fragment {
         Probe selectedProbe = getSelectedProbe();
         switch(currentStep) {
             case SELECT_PROBE: {
-                if (selectedProbe != null) {
+                if (selectedProbe != null && shouldConnect) {
                     return Step.CONNECT_BLUETOOTH;
                 }
             } break;
@@ -363,6 +392,11 @@ public class AutoConnectionFragment extends Fragment {
             wifiInfoText = selectedProbe.wifiInfo.toString();
         }
 
+        if (currentStep == Step.SELECT_PROBE) {
+            binding.connectToProbe.setText("Connect");
+        } else {
+            binding.connectToProbe.setText("Disconnect");
+        }
         binding.currentStep.setText(currentStep.toString());
         binding.bluetoothConnected.setText(Boolean.toString(bluetoothConnected));
         binding.probePowered.setText(Boolean.toString(probePowered));
@@ -371,6 +405,7 @@ public class AutoConnectionFragment extends Fragment {
         binding.solumConnected.setText(Boolean.toString(solumnConnected));
         binding.loadedApplication.setText(Boolean.toString(applicationLoaded));
         binding.imaging.setText(Boolean.toString(imaging));
+        binding.toggleImaging.setEnabled(solumnConnected && applicationLoaded && certificateValid);
     }
 
     private void updateProbeState() {
@@ -413,6 +448,7 @@ public class AutoConnectionFragment extends Fragment {
     }
 
     private Step currentStep = Step.SELECT_PROBE;
+    private boolean shouldConnect = false;
     private boolean bluetoothConnected = false;
     private boolean probePowered = false;
     private boolean wifiEnabled = false;
@@ -422,11 +458,42 @@ public class AutoConnectionFragment extends Fragment {
     private boolean applicationLoaded = false;
     private boolean imaging = false;
 
+    private void reset() {
+        currentStep = Step.SELECT_PROBE;
+        shouldConnect = false;
+        bluetoothConnected = false;
+        probePowered = false;
+        wifiEnabled = false;
+        wifiConnected = false;
+        solumnConnected = false;
+        certificateValid = false;
+        applicationLoaded = false;
+        imaging = false;
+    }
+
     private void showMessage(String msg) {
         Log.d(TAG, msg);
     }
 
     private void showError(String err) {
         Log.e(TAG, err);
+    }
+
+    private class ImageCallback implements ImageConverter.Callback {
+        private final MutableLiveData<Bitmap> dest;
+
+        ImageCallback(MutableLiveData<Bitmap> dest) {
+            this.dest = dest;
+        }
+
+        @Override
+        public void onResult(Bitmap bitmap) {
+            dest.postValue(bitmap);
+        }
+
+        @Override
+        public void onError(Exception e) {
+            showError("Error while converting image: " + e);
+        }
     }
 }

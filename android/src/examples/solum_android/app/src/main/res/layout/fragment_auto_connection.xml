@@ -221,4 +221,24 @@
             android:id="@+id/imaging"/>
     </LinearLayout>
 
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+        <Button
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginRight="16dp"
+            android:id="@+id/toggle_imaging"
+            android:text="Toggle imaging"/>
+    </LinearLayout>
+
+    <ImageView
+        android:id="@+id/image_view"
+        android:layout_width="512px"
+        android:layout_height="512px"
+        android:layout_gravity="center"
+        android:contentDescription="@string/ultrasound_image"
+        android:src="@drawable/ic_baseline_image_24" />
+
 </LinearLayout>
