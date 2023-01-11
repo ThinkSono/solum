@@ -138,9 +138,17 @@ public class AutoConnectionFragment extends Fragment {
     }
 
     private final ActivityResultLauncher<String[]> bluetoothPermissionLauncher = registerForActivityResult(new ActivityResultContracts.RequestMultiplePermissions(), this::onBluetoothPermissionUpdate);
+    private final ActivityResultLauncher<String[]> wifiPermissionLauncher = registerForActivityResult(new ActivityResultContracts.RequestMultiplePermissions(), this::onWifiPermissionUpdate);
 
     public void onBluetoothPermissionUpdate(Map<String, Boolean> results) {
         this.btAntenna.onBluetoothPermissionUpdate(results);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            wifiAntenna.requestWifiPermissions(wifiPermissionLauncher);
+        }
+    }
+
+    public void onWifiPermissionUpdate(Map<String, Boolean> results) {
+        this.wifiAntenna.onWifiPermissionsUpdate(results);
     }
 
     @Override

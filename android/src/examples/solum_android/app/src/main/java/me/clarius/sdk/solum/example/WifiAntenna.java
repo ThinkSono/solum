@@ -1,7 +1,9 @@
 package me.clarius.sdk.solum.example;
 
+import android.Manifest;
 import android.app.Application;
 import android.content.Context;
+import android.content.pm.PackageManager;
 import android.net.ConnectivityManager;
 import android.net.MacAddress;
 import android.net.Network;
@@ -15,16 +17,46 @@ import android.net.wifi.WifiNetworkSpecifier;
 import android.os.Build;
 import android.util.Log;
 
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.RequiresApi;
+import androidx.core.content.ContextCompat;
 import androidx.lifecycle.AndroidViewModel;
 import androidx.lifecycle.MutableLiveData;
 
 import java.util.List;
+import java.util.Map;
 
 public class WifiAntenna extends AndroidViewModel {
     public final MutableLiveData<Network> network = new MutableLiveData<>(null);
     public final MutableLiveData<Boolean> tryingToConnect = new MutableLiveData<>(false);
+    public final MutableLiveData<Boolean> permissionsGranted = new MutableLiveData<>(false);
+
+    @RequiresApi(api = Build.VERSION_CODES.S)
+    public void requestWifiPermissions(ActivityResultLauncher<String[]> launcher) {
+        String[] permissions = new String[]{Manifest.permission.CHANGE_NETWORK_STATE, Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION};
+        boolean hasAllPermissions = true;
+        for (String permission : permissions) {
+            hasAllPermissions &= ContextCompat.checkSelfPermission(getApplication(), permission) == PackageManager.PERMISSION_GRANTED;
+        }
+
+        if (!hasAllPermissions) {
+            launcher.launch(permissions);
+        } else {
+            permissionsGranted.postValue(true);
+        }
+    }
+
+    public void onWifiPermissionsUpdate(Map<String, Boolean> results) {
+        boolean hasAllPermissions = true;
+        if (results != null) {
+            for (boolean value : results.values()) {
+                hasAllPermissions &= value;
+            }
+        }
+        permissionsGranted.postValue(hasAllPermissions);
+    }
 
     private ProbeStore probeStore;
 

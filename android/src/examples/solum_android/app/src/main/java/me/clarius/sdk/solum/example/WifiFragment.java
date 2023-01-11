@@ -35,21 +35,10 @@ public class WifiFragment extends Fragment {
 
     private boolean permissionsGranted = false;
 
-    private final ActivityResultLauncher<String[]> wifiPermissionLauncher = registerForActivityResult(new ActivityResultContracts.RequestMultiplePermissions(), this::onPermissionUpdate);
+    private final ActivityResultLauncher<String[]> wifiPermissionLauncher = registerForActivityResult(new ActivityResultContracts.RequestMultiplePermissions(), this::onWifiPermissionsUpdate);
 
-    @RequiresApi(api = Build.VERSION_CODES.S)
-    private void requestWifiPermissions() {
-        wifiPermissionLauncher.launch(new String[]{Manifest.permission.CHANGE_NETWORK_STATE, Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION});
-    }
-
-    private void onPermissionUpdate(Map<String, Boolean> results) {
-        permissionsGranted = true;
-        if (results != null) {
-            for (boolean value : results.values()) {
-                permissionsGranted &= value;
-            }
-        }
-        updatePermissionLabel();
+    private void onWifiPermissionsUpdate(Map<String, Boolean> results) {
+        antenna.onWifiPermissionsUpdate(results);
     }
 
     private void updatePermissionLabel() {
@@ -88,7 +77,7 @@ public class WifiFragment extends Fragment {
 
         binding.wifiPermissionBtn.setOnClickListener(v -> {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                requestWifiPermissions();
+                antenna.requestWifiPermissions(wifiPermissionLauncher);
             }
         });
 
@@ -131,6 +120,9 @@ public class WifiFragment extends Fragment {
         );
 
         updatePermissionLabel();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            antenna.requestWifiPermissions(wifiPermissionLauncher);
+        }
     }
 
     private Probe getSelectedProbe() {
