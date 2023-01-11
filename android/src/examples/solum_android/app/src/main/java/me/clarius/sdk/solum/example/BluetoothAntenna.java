@@ -149,6 +149,10 @@ public class BluetoothAntenna extends AndroidViewModel implements DeviceReceiver
     }
 
     public void connect(String deviceAddress) {
+        connect(deviceAddress, true);
+    }
+
+    public void connect(String deviceAddress, boolean autoReconnect) {
         stopScan();
         disconnect();
 
@@ -157,7 +161,7 @@ public class BluetoothAntenna extends AndroidViewModel implements DeviceReceiver
             return;
         }
         try {
-            gattClient = selectedDevice.device.connectGatt(getApplication(), true, gattCallback);
+            gattClient = selectedDevice.device.connectGatt(getApplication(), autoReconnect, gattCallback);
         } catch (SecurityException ignored) {}
     }
 
