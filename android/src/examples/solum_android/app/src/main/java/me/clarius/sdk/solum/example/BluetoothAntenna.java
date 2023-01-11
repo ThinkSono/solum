@@ -15,6 +15,7 @@ import android.bluetooth.le.BluetoothLeScanner;
 import android.bluetooth.le.ScanResult;
 import android.content.Context;
 import android.content.pm.PackageManager;
+import android.net.MacAddress;
 import android.os.Build;
 import android.util.Log;
 
@@ -34,6 +35,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.UUID;
+
+import javax.crypto.Mac;
 
 interface DeviceReceiver {
     void addDevice(ScanResult result);
@@ -195,6 +198,19 @@ public class BluetoothAntenna extends AndroidViewModel implements DeviceReceiver
                 Probe probe = new Probe();
                 probe.bluetoothAddr = device.address;
                 probe.name = device.name;
+                MacAddress address = MacAddress.fromString(probe.bluetoothAddr);
+                byte[] address_arr = address.toByteArray();
+                StringBuilder sb = new StringBuilder();
+                for (byte b : address_arr) {
+                    sb.append(String.format("%02X ", b));
+                }
+                int lastByte = 0xFF & address_arr[5];
+                if (lastByte != 255) {
+                    lastByte += 1;
+                    address_arr[5] = (byte) lastByte;
+                    probe.bssid = MacAddress.fromBytes(address_arr).toString();
+                    Log.d("BluetoothAntenna", "Inferred BSSID from bluetooth address: " + probe.bssid);
+                }
                 probeStore.probeMap.put(probe.name, probe);
                 probeStore.probeUpdated.postValue(probe);
             }
