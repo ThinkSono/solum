@@ -285,9 +285,7 @@ public class AutoConnectionFragment extends Fragment {
             } break;
             case WAIT_WIFI: break;
             case CONNECT_WIFI: {
-                wifiAntenna.ssid.setValue(selectedProbe.wifiInfo.ssid);
-                wifiAntenna.passphrase.setValue(selectedProbe.wifiInfo.passphrase);
-                wifiAntenna.connectWifi();
+                wifiAntenna.connectWifi(selectedProbe);
             } break;
             case CONNECT_SOLUM: {
                 solum.connect(selectedProbe.wifiInfo.ipAddr, selectedProbe.wifiInfo.controlPort);

@@ -79,9 +79,7 @@ public class WifiFragment extends Fragment {
             if (connectButtonEnabled) {
                 String ssid = binding.wifiPrefix.getText().toString();
                 String passphrase = binding.wifiPassword.getText().toString();
-                antenna.ssid.setValue(ssid);
-                antenna.passphrase.setValue(passphrase);
-                antenna.connectWifi();
+                antenna.connectWifi(ssid, passphrase, getSelectedProbe());
             } else {
                 antenna.disconnectWifi();
                 updatePermissionLabel();
@@ -111,14 +109,6 @@ public class WifiFragment extends Fragment {
             }
         });
 
-        antenna.ssid.observe(getViewLifecycleOwner(), ssid -> {
-            binding.wifiPrefix.setText(ssid);
-        });
-
-        antenna.passphrase.observe(getViewLifecycleOwner(), passphrase -> {
-            binding.wifiPassword.setText(passphrase);
-        });
-
         probeListAdapter = new ArrayAdapter<>(requireContext(), android.R.layout.simple_spinner_item);
         probeListAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
 
@@ -141,6 +131,14 @@ public class WifiFragment extends Fragment {
         );
 
         updatePermissionLabel();
+    }
+
+    private Probe getSelectedProbe() {
+        int position = binding.probeList.getSelectedItemPosition();
+        if (position != AdapterView.INVALID_POSITION) {
+            return probeListAdapter.getItem(position);
+        }
+        return null;
     }
 
     private void updateSelectedProbe(Probe probe) {

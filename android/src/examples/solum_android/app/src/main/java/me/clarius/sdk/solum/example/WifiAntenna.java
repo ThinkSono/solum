@@ -25,9 +25,8 @@ import java.util.List;
 public class WifiAntenna extends AndroidViewModel {
     public final MutableLiveData<Network> network = new MutableLiveData<>(null);
     public final MutableLiveData<Boolean> tryingToConnect = new MutableLiveData<>(false);
-    public final MutableLiveData<String> ssid = new MutableLiveData<>("");
-    public final MutableLiveData<String> bssid = new MutableLiveData<>(null);
-    public final MutableLiveData<String> passphrase = new MutableLiveData<>("");
+
+    private ProbeStore probeStore;
 
     private ConnectivityManager.NetworkCallback networkCallback;
 
@@ -35,16 +34,28 @@ public class WifiAntenna extends AndroidViewModel {
         super(application);
     }
 
+    public void setProbeStore(ProbeStore probeStore) {
+        this.probeStore = probeStore;
+    }
+
     @RequiresApi(api = Build.VERSION_CODES.S)
-    public void connectWifi() {
-        Log.d("Antenna", "Connecting to wifi with ssid " + ssid.getValue() + " and passphrase " + passphrase.getValue());
+    public void connectWifi(Probe probe) {
+        if (probe == null || probe.wifiInfo == null || probe.wifiInfo.ssid == null || probe.wifiInfo.passphrase == null) {
+            return;
+        }
+        connectWifi(probe.wifiInfo.ssid, probe.wifiInfo.passphrase, probe);
+    }
+
+    @RequiresApi(api = Build.VERSION_CODES.S)
+    public void connectWifi(String ssid, String passphrase, Probe probe) {
+        Log.d("Antenna", "Connecting to wifi with ssid " + ssid + " and passphrase " + passphrase);
 
         final WifiNetworkSpecifier.Builder builder = new WifiNetworkSpecifier.Builder()
-                .setSsid(ssid.getValue())
-                .setWpa2Passphrase(passphrase.getValue());
+                .setSsid(ssid)
+                .setWpa2Passphrase(passphrase);
 
-        if(bssid.getValue() != null) {
-            builder.setBssid(MacAddress.fromString(bssid.getValue()));
+        if(probe != null && probe.bssid != null) {
+            builder.setBssid(MacAddress.fromString(probe.bssid));
         }
 
         final NetworkSpecifier specifier = builder.build();
@@ -74,7 +85,12 @@ public class WifiAntenna extends AndroidViewModel {
                 WifiInfo wifiInfo = (WifiInfo) networkCapabilities.getTransportInfo();
                 String bssid = wifiInfo.getBSSID();
                 if (!bssid.equals("02:00:00:00:00:00")) {
-                    WifiAntenna.this.bssid.postValue(bssid);
+                    if (probe != null) {
+                        probe.bssid = bssid;
+                        if (probeStore != null) {
+                            probeStore.probeUpdated.postValue(probe);
+                        }
+                    }
                 }
             }
 
