@@ -39,10 +39,7 @@ public class WifiFragment extends Fragment {
 
     @RequiresApi(api = Build.VERSION_CODES.S)
     private void requestWifiPermissions() {
-        if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.CHANGE_NETWORK_STATE) == PackageManager.PERMISSION_GRANTED) {
-            onPermissionUpdate(null);
-        }
-        wifiPermissionLauncher.launch(new String[]{Manifest.permission.CHANGE_NETWORK_STATE});
+        wifiPermissionLauncher.launch(new String[]{Manifest.permission.CHANGE_NETWORK_STATE, Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION});
     }
 
     private void onPermissionUpdate(Map<String, Boolean> results) {
