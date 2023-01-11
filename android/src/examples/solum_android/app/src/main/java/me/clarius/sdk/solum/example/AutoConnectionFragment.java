@@ -277,7 +277,7 @@ public class AutoConnectionFragment extends Fragment {
 
         switch (currentStep) {
             case CONNECT_BLUETOOTH: {
-                btAntenna.connect(selectedProbe.bluetoothAddr);
+                btAntenna.connect(selectedProbe.bluetoothAddr, false);
             } break;
             case POWER_PROBE: {
                 byte[] payload = new byte[]{1};
@@ -376,6 +376,9 @@ public class AutoConnectionFragment extends Fragment {
                 }
             } break;
             case IMAGING: {
+                if (!solumnConnected) {
+                    return Step.CONNECT_SOLUM;
+                }
                 if (!imaging) {
                     return Step.IMAGING_READY;
                 }
@@ -466,7 +469,6 @@ public class AutoConnectionFragment extends Fragment {
         wifiEnabled = false;
         wifiConnected = false;
         solumnConnected = false;
-        certificateValid = false;
         applicationLoaded = false;
         imaging = false;
     }
