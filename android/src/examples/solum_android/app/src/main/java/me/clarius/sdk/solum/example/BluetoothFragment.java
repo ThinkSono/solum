@@ -123,8 +123,11 @@ public class BluetoothFragment extends Fragment {
             if (state == BluetoothProfile.STATE_CONNECTED) {
                 btAntenna.disconnect();
             } else {
-                String selectedAddress = deviceListAdapter.getItem(binding.deviceList.getSelectedItemPosition()).address;
-                btAntenna.connect(selectedAddress);
+                int position = binding.deviceList.getSelectedItemPosition();
+                if (position != AdapterView.INVALID_POSITION) {
+                    String selectedAddress = deviceListAdapter.getItem(position).address;
+                    btAntenna.connect(selectedAddress);
+                }
             }
         });
 
