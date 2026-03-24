@@ -3,6 +3,8 @@ plugins {
 }
 
 android {
+    namespace "me.clarius.sdk.solum.example"
+
     compileSdk 33
 
     defaultConfig {
@@ -26,6 +28,7 @@ android {
     }
     buildFeatures {
         viewBinding true
+        buildConfig true
     }
 }
 

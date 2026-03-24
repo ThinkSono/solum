@@ -24,6 +24,7 @@ import java.util.concurrent.Executors;
 
 import me.clarius.sdk.Button;
 import me.clarius.sdk.Connection;
+import me.clarius.sdk.ErrorCode;
 import me.clarius.sdk.ImagingState;
 import me.clarius.sdk.Mode;
 import me.clarius.sdk.Param;
@@ -52,8 +53,8 @@ public class SolumFragment extends Fragment {
     private ArrayAdapter<Probe> probeListAdapter;
     private final Solum.Listener solumListener = new Solum.Listener() {
         @Override
-        public void error(String msg) {
-            showError(msg);
+        public void error(ErrorCode errorCode, String s) {
+
         }
 
         @Override
@@ -90,6 +91,16 @@ public class SolumFragment extends Fragment {
 
         @Override
         public void newSpectralImageFn(ByteBuffer buffer, SpectralImageInfo info) {
+        }
+
+        @Override
+        public void newImuPortFn(int i) {
+
+        }
+
+        @Override
+        public void newImuDataFn(PosInfo posInfo) {
+
         }
 
         @Override
@@ -180,12 +191,12 @@ public class SolumFragment extends Fragment {
     }
 
     private void doSwUpdate() {
-        solum.updateSoftware(
-                result -> showMessage("SW update result: " + result),
-                (progress, total) -> {
-                    binding.progressBar.setMax(total);
-                    binding.progressBar.setProgress(progress);
-                });
+//        solum.updateSoftware(
+//                result -> showMessage("SW update result: " + result),
+//                (progress, total) -> {
+//                    binding.progressBar.setMax(total);
+//                    binding.progressBar.setProgress(progress);
+//                });
     }
 
     private class RawDataCallback {
@@ -221,7 +232,7 @@ public class SolumFragment extends Fragment {
         final int start = 0;
         final int end = 0;
         RawDataCallback callback = new RawDataCallback();
-        solum.requestRawData(start, end, callback::requestResult);
+//        solum.requestRawData(start, end, callback::requestResult);
     }
 
     private void toggleBuffering() {
