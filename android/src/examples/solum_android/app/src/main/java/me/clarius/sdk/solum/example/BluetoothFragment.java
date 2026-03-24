@@ -1,6 +1,5 @@
 package me.clarius.sdk.solum.example;
 
-import android.bluetooth.BluetoothGatt;
 import android.bluetooth.BluetoothGattCharacteristic;
 import android.bluetooth.BluetoothGattService;
 import android.bluetooth.BluetoothProfile;
@@ -158,6 +157,7 @@ public class BluetoothFragment extends Fragment {
         probeStore.probeUpdated.observe(getViewLifecycleOwner(), probe -> {
             updateProbePower(probe.powered);
             updateWifi(probe.wifiInfo);
+            updateTemperature(probe.icbTemperature, probe.batteryTemperature);
         });
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -255,5 +255,10 @@ public class BluetoothFragment extends Fragment {
         builder.append("\ncastPort: ").append(wifiInfo.castPort);
 
         binding.wifiInfo.setText(builder.toString());
+    }
+
+    public void updateTemperature(int icb, int battery) {
+        binding.icbTemperature.setText(String.format("%1$d", icb));
+        binding.batteryTemperature.setText(String.format("%1$d", battery));
     }
 }

@@ -8,6 +8,8 @@ public class Probe {
     public String bssid;
     public WifiInfo wifiInfo;
     public boolean powered;
+    public int icbTemperature;
+    public int batteryTemperature;
 
     @NonNull
     @Override

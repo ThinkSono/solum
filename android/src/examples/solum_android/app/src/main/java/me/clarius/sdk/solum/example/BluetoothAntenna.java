@@ -26,17 +26,18 @@ import androidx.core.content.ContextCompat;
 import androidx.lifecycle.AndroidViewModel;
 import androidx.lifecycle.MutableLiveData;
 
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.Queue;
 import java.util.UUID;
 
-import javax.crypto.Mac;
+import kotlin.NotImplementedError;
 
 interface DeviceReceiver {
     void addDevice(ScanResult result);
@@ -70,13 +71,39 @@ public class BluetoothAntenna extends AndroidViewModel implements DeviceReceiver
     private ScanCallback currentScan = null;
     private BluetoothOperator operator = new BluetoothOperator();
 
+    // NOTE(soeren): Standard Bluetooth UUIDs always have the form
+    // 0000XXXX-0000-1000-8000-00805f9b34fb where XXXX is variable
+    // The spec only uses 4-digit hex numbers to identify services, characteristics etc
+    // So when it says "service foo has uuid 0x1234", the uuid is 00001234-0000-1000-8000-00805f9b34fb
     static final UUID powerServiceUUID = UUID.fromString("8C853B6A-2297-44C1-8277-73627C8D2ABC");
     static final UUID powerPublishedUUID = UUID.fromString("8C853B6A-2297-44C1-8277-73627C8D2ABD");
     static final UUID powerRequestUUID = UUID.fromString("8C853B6A-2297-44C1-8277-73627C8D2ABE");
     static final UUID wifiServiceUUID = UUID.fromString("F9EB3FAE-947A-4E5B-AB7C-C799E91ED780");
     static final UUID wifiPublishedUUID = UUID.fromString("F9EB3FAE-947A-4E5B-AB7C-C799E91ED781");
     static final UUID wifiRequestUUID = UUID.fromString("F9EB3FAE-947A-4E5B-AB7C-C799E91ED782");
+
+    /**
+     * "Health Thermometer Service" according to the offical spec.
+     * Its meant for body thermometers and similar things.
+     * Clarius doesn't actually follow this spec, they cook their own thing.
+     */
+    static final UUID temperatureServiceUUID = UUID.fromString("00001809-0000-1000-8000-00805f9b34fb");
+//    static final UUID temperatureMeasurementUUID = UUID.fromString("00002A1C-0000-1000-8000-00805f9b34fb");
+//    static final UUID temperatureTypeUUID = UUID.fromString("00002A1D-0000-1000-8000-00805f9b34fb");
+    /**
+     * In the context of body thermometers this would output readings continuously before the thermometer takes a final reading and beeps.
+     * For clarius, this is the only thing that matters to us, as it continuously reports the temperature of the probe.
+     * Note that you cannot read from this with readCharacteristic, as its properties only have the NOTIFY flag set, meaning you must subscribe to it to receive anything.
+     */
+    static final UUID temperatureIntermediateUUID = UUID.fromString("00002A1E-0000-1000-8000-00805f9b34fb");
+//    static final UUID measurementIntervalUUID = UUID.fromString("00002A21-0000-1000-8000-00805f9b34fb");
     static final UUID configurationDescriptorUUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb");
+
+    static final Map<UUID, String> uuidToName = Map.of(
+            temperatureServiceUUID, "temperatureService",
+            temperatureIntermediateUUID, "temperatureIntermediate",
+            configurationDescriptorUUID, "configurationDescriptor"
+    );
 
     @RequiresApi(api = Build.VERSION_CODES.S)
     public void requestBluetoothPermissions(ActivityResultLauncher<String[]> launcher) {
@@ -241,6 +268,7 @@ public class BluetoothAntenna extends AndroidViewModel implements DeviceReceiver
         @Override
         public void onCharacteristicRead(@NonNull BluetoothGatt gatt, @NonNull BluetoothGattCharacteristic characteristic, int status) {
             byte[] value = characteristic.getValue();
+            Log.d("BluetoothFragment", String.format("characteristic %1$s read with bytes %2$s", characteristic.getUuid().toString(), Strings.bytesToHex(value)));
             if (status == BluetoothGatt.GATT_SUCCESS) {
                 if (characteristic.getUuid().equals(powerPublishedUUID)) {
                     Log.d("BluetoothFragment", "updateProbePower");
@@ -255,11 +283,15 @@ public class BluetoothAntenna extends AndroidViewModel implements DeviceReceiver
         @Override
         public void onCharacteristicChanged(@NonNull BluetoothGatt gatt, @NonNull BluetoothGattCharacteristic characteristic) {
             byte[] value = characteristic.getValue();
-            if (characteristic.getUuid().equals(powerPublishedUUID)) {
+            Log.d("BluetoothFragment", String.format("characteristic %1$s changed with bytes %2$s", characteristic.getUuid().toString(), Strings.bytesToHex(value)));
+            UUID uuid = characteristic.getUuid();
+            if (uuid.equals(powerPublishedUUID)) {
                 Log.d("BluetoothFragment", "updateProbePower");
                 updateProbePower(value);
-            } else if (characteristic.getUuid().equals(wifiPublishedUUID)) {
+            } else if (uuid.equals(wifiPublishedUUID)) {
                 updateWifi(value);
+            } else if (uuid.equals(temperatureIntermediateUUID)) {
+                updateTemperature(value);
             }
         }
 
@@ -270,8 +302,18 @@ public class BluetoothAntenna extends AndroidViewModel implements DeviceReceiver
         }
 
         @Override
+        public void onDescriptorRead(@NonNull BluetoothGatt gatt, @NonNull BluetoothGattDescriptor descriptor, int status, @NonNull byte[] value) {
+            Log.d("BluetoothFragment", "onDescriptorRead");
+            String stringValue = Arrays.toString(value);
+            String descriptorUUID = descriptor.getUuid().toString();
+            String message = String.format("descriptor %1$s: %2$s", descriptorUUID, stringValue);
+            Log.d("BluetoothFragment", message);
+            operator.commandFinished();
+        }
+
+        @Override
         public void onDescriptorWrite(BluetoothGatt gatt, BluetoothGattDescriptor descriptor, int status) {
-            Log.d("BluetoothFragment", "onDescriptorWrite");
+            Log.d("BluetoothFragment", String.format("descriptor %1$s written with %2$d ", descriptor.getUuid().toString(), status));
             operator.commandFinished();
         }
 
@@ -296,10 +338,10 @@ public class BluetoothAntenna extends AndroidViewModel implements DeviceReceiver
                 case BluetoothProfile.STATE_CONNECTED:
                     discoverServices();
                     changeMTU();
-                    subscribeCharacteristic(powerServiceUUID, powerPublishedUUID);
-                    subscribeCharacteristic(wifiServiceUUID, wifiPublishedUUID);
                     readCharacteristic(powerServiceUUID, powerPublishedUUID);
                     readCharacteristic(wifiServiceUUID, wifiPublishedUUID);
+
+                    subscribeCharacteristic(temperatureServiceUUID, temperatureIntermediateUUID);
                     break;
             }
         } catch (SecurityException ignored) {}
@@ -330,6 +372,21 @@ public class BluetoothAntenna extends AndroidViewModel implements DeviceReceiver
         operator.addCommand(() -> {
             BluetoothGattCharacteristic characteristic = findCharacteristic(serviceUUID, characteristicUUID);
             if(characteristic == null) return;
+
+            int properties = characteristic.getProperties();
+            String name = uuidToName.get(characteristicUUID);
+            if (name != null) {
+                Log.d("BLE", String.format("%1$s properties: %2$04X", name, properties));
+            } else {
+                Log.d("BLE", String.format("%1$s properties: %2$04X", characteristic.getUuid().toString(), properties));
+            }
+
+            if ((properties & BluetoothGattCharacteristic.PROPERTY_READ) == 0) {
+                Log.w("BluetoothFragment", "Cannot read characteristic " + characteristic.getUuid().toString() + " as it doesnt have that property set");
+                operator.commandFinished();
+                return;
+            }
+
             Log.d("BluetoothFragment", "Dispatching read of characteristic " + characteristic.getUuid().toString());
             try {
                 boolean initialized = gattClient.readCharacteristic(characteristic);
@@ -338,6 +395,24 @@ public class BluetoothAntenna extends AndroidViewModel implements DeviceReceiver
                 Log.e("BluetoothFragment", "Not allowed to read characteristic. Check app permissions.");
             }
         });
+    }
+
+    /**
+     * NOTE(soeren): Leaving this here so you dont waste your time like I did.
+     * The clarius device only use the configurationDescriptor (0x2902), which cannot be read, only written to to subscribe to updates.
+     * In short: dont use this method, its useless
+     */
+    public void readDescriptor(BluetoothGattDescriptor descriptor) {
+        throw new NotImplementedError();
+//        operator.addCommand(() -> {
+//            Log.d("BluetoothFragment", "Dispatching read of descriptor " + descriptor.getUuid().toString());
+//            try {
+//                boolean initialized = gattClient.readDescriptor(descriptor);
+//                Log.d("BluetoothFragment", "Read request initialized: " + initialized);
+//            } catch (SecurityException e) {
+//                Log.e("BluetoothFragment", "Not allowed to read characteristic. Check app permissions.");
+//            }
+//        });
     }
 
     public void subscribeCharacteristic(UUID serviceUUID, UUID characteristicUUID) {
@@ -432,6 +507,28 @@ public class BluetoothAntenna extends AndroidViewModel implements DeviceReceiver
         if (probe != null) {
             probe.wifiInfo = WifiInfo.fromPayload(payload);
             Log.d("BluetoothFragment", "Update wifi info for probe " + probe);
+            postProbeUpdate(probe);
+        }
+    }
+
+    private void updateTemperature(byte[] tempInfo) {
+        if (tempInfo == null) return;
+
+        if (tempInfo.length < 5) return;
+
+        // NOTE(soeren): I scientifically heated an L7HD (old model) with a hair dryer with the battery facing towards the hair dryer
+        // and went from 00001A0016 to 0000230037 (26/22 to 35/55)
+        // I conclude that the first number must be the ICB temp in celsius and the second
+        // one the battery temp in celsius
+        int icbTempCelsius = Byte.toUnsignedInt(tempInfo[2]);
+        int batteryTempCelsius = Byte.toUnsignedInt(tempInfo[4]);
+
+        Log.d("BluetoothFragment", "updateTemperature called with length " + tempInfo.length);
+        Probe probe = getCurrentProbe();
+        if (probe != null) {
+            probe.icbTemperature = icbTempCelsius;
+            probe.batteryTemperature = batteryTempCelsius;
+            Log.d("BluetoothFragment", "Update temperature for probe " + probe);
             postProbeUpdate(probe);
         }
     }
