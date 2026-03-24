@@ -278,7 +278,7 @@ public class SolumFragment extends Fragment {
             return;
         }
         showMessage("Connecting to " + ipAddress + ":" + tcpPort);
-        solum.connect(ipAddress, tcpPort);
+        solum.connect(ipAddress, tcpPort, java.util.Optional.empty());
     }
 
     private void doDisconnect() {

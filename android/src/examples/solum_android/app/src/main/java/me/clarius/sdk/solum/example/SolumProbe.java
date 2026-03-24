@@ -16,6 +16,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import me.clarius.sdk.Button;
 import me.clarius.sdk.Connection;
+import me.clarius.sdk.ErrorCode;
 import me.clarius.sdk.ImagingState;
 import me.clarius.sdk.Platform;
 import me.clarius.sdk.PosInfo;
@@ -49,8 +50,8 @@ public class SolumProbe extends AndroidViewModel {
 
     private final Solum.Listener solumListener = new Solum.Listener() {
         @Override
-        public void error(String msg) {
-            showError(msg);
+        public void error(ErrorCode errorCode, String s) {
+
         }
 
         @Override
@@ -93,6 +94,16 @@ public class SolumProbe extends AndroidViewModel {
 
         @Override
         public void newSpectralImageFn(ByteBuffer buffer, SpectralImageInfo info) {
+        }
+
+        @Override
+        public void newImuPortFn(int i) {
+
+        }
+
+        @Override
+        public void newImuDataFn(PosInfo posInfo) {
+
         }
 
         @Override
@@ -214,7 +225,7 @@ public class SolumProbe extends AndroidViewModel {
                 wifiAntenna.connectWifi(selectedProbe);
             } break;
             case CONNECT_SOLUM: {
-                solum.connect(selectedProbe.wifiInfo.ipAddr, selectedProbe.wifiInfo.controlPort);
+                solum.connect(selectedProbe.wifiInfo.ipAddr, selectedProbe.wifiInfo.controlPort, java.util.Optional.empty());
             } break;
             case CHECK_CERTIFICATE: break;
             case LOAD_APPLICATION: {
