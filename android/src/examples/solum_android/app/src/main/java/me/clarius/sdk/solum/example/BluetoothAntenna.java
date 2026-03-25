@@ -81,6 +81,8 @@ public class BluetoothAntenna extends AndroidViewModel implements DeviceReceiver
     static final UUID wifiServiceUUID = UUID.fromString("F9EB3FAE-947A-4E5B-AB7C-C799E91ED780");
     static final UUID wifiPublishedUUID = UUID.fromString("F9EB3FAE-947A-4E5B-AB7C-C799E91ED781");
     static final UUID wifiRequestUUID = UUID.fromString("F9EB3FAE-947A-4E5B-AB7C-C799E91ED782");
+    static final UUID batteryServiceUUID = UUID.fromString("0000180F-0000-1000-8000-00805f9b34fb");
+    static final UUID batteryLevelUUID = UUID.fromString("00002A19-0000-1000-8000-00805f9b34fb");
 
     /**
      * "Health Thermometer Service" according to the offical spec.
@@ -341,7 +343,14 @@ public class BluetoothAntenna extends AndroidViewModel implements DeviceReceiver
                     readCharacteristic(powerServiceUUID, powerPublishedUUID);
                     readCharacteristic(wifiServiceUUID, wifiPublishedUUID);
 
+                    subscribeCharacteristic(powerServiceUUID, powerPublishedUUID);
+                    subscribeCharacteristic(wifiServiceUUID, wifiPublishedUUID);
                     subscribeCharacteristic(temperatureServiceUUID, temperatureIntermediateUUID);
+
+                    printProperties(powerServiceUUID, powerPublishedUUID);
+                    printProperties(wifiServiceUUID, wifiPublishedUUID);
+                    printProperties(batteryServiceUUID, batteryLevelUUID);
+                    printProperties(temperatureServiceUUID, temperatureIntermediateUUID);
                     break;
             }
         } catch (SecurityException ignored) {}
@@ -368,10 +377,10 @@ public class BluetoothAntenna extends AndroidViewModel implements DeviceReceiver
         });
     }
 
-    public void readCharacteristic(UUID serviceUUID, UUID characteristicUUID) {
+    public void printProperties(UUID serviceUUID, UUID characteristicUUID) {
         operator.addCommand(() -> {
             BluetoothGattCharacteristic characteristic = findCharacteristic(serviceUUID, characteristicUUID);
-            if(characteristic == null) return;
+            if (characteristic == null) return;
 
             int properties = characteristic.getProperties();
             String name = uuidToName.get(characteristicUUID);
@@ -380,7 +389,16 @@ public class BluetoothAntenna extends AndroidViewModel implements DeviceReceiver
             } else {
                 Log.d("BLE", String.format("%1$s properties: %2$04X", characteristic.getUuid().toString(), properties));
             }
+            operator.commandFinished();
+        });
+    }
 
+    public void readCharacteristic(UUID serviceUUID, UUID characteristicUUID) {
+        operator.addCommand(() -> {
+            BluetoothGattCharacteristic characteristic = findCharacteristic(serviceUUID, characteristicUUID);
+            if(characteristic == null) return;
+
+            int properties = characteristic.getProperties();
             if ((properties & BluetoothGattCharacteristic.PROPERTY_READ) == 0) {
                 Log.w("BluetoothFragment", "Cannot read characteristic " + characteristic.getUuid().toString() + " as it doesnt have that property set");
                 operator.commandFinished();
